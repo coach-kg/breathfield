@@ -21,6 +21,8 @@
   --f-mono: "Martian Mono", ui-monospace, "SF Mono", Menlo, monospace;
   color-scheme: dark;
 }
+/* Colour-blind safe set: lightness rises from low to high, hues from the viridis family. */
+:root[data-palette="safe"] { --low: #5a4bb5; --mid: #23a08f; --high: #f3dc5a; }
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; overflow: hidden; }
 body { background: var(--void); color: var(--ink); font-family: var(--f-mono); font-size: 12px; }
@@ -28,6 +30,12 @@ body { background: var(--void); color: var(--ink); font-family: var(--f-mono); f
 
 #stage, #stage canvas { position: fixed; inset: 0; display: block; }
 #stage canvas { touch-action: none; cursor: crosshair; }
+.tint { position: fixed; inset: 0; pointer-events: none; opacity: 0; mix-blend-mode: color; transition: background-color 1.5s ease; }
+.tint.glow { mix-blend-mode: screen; }
+.pace-rate { display: flex; align-items: baseline; gap: 10px; }
+.pace-rate b { font-family: var(--f-display); font-weight: 200; font-size: 40px; font-variant-numeric: tabular-nums; }
+.pace-rate span { color: var(--mute); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; }
+output { color: var(--ink); }
 
 .ui { position: fixed; inset: 0; pointer-events: none; }
 .top, .dock { pointer-events: auto; transition: opacity 1.2s ease; }

@@ -17,6 +17,8 @@
 </head>
 <body>
 <main id="stage" aria-label="Breathing visual"></main>
+<div class="tint" id="tintColor" aria-hidden="true"></div>
+<div class="tint glow" id="tintGlow" aria-hidden="true"></div>
 
 <div class="ui" id="ui">
   <header class="top">
@@ -42,6 +44,7 @@
   <footer class="dock" id="dock">
     <div class="grp" role="group" aria-label="Scene" id="scenes"></div>
     <label class="sel" for="pat"><span>Breath</span><select id="pat"></select></label>
+    <button class="solo" id="paceBtn">Adjust pace</button>
     <button class="solo" id="sensorBtn">Sensor: <b id="sensorName">Practice</b></button>
     <span class="spacer"></span>
     <button class="solo primary" id="sessionBtn">Start session</button>
@@ -49,7 +52,7 @@
     <button class="solo" id="sound" aria-pressed="false">Sound</button>
     <button class="solo" id="guide" aria-pressed="true">Guide</button>
     <button class="solo" id="full">Fullscreen</button>
-    <p class="hint" id="hint">Hold <kbd>space</kbd>, or press and hold the screen, while you breathe in. Let go as you breathe out. <kbd>Enter</kbd> starts a session, <kbd>J</kbd> opens the journal, <kbd>1</kbd>–<kbd>4</kbd> switch scenes, <kbd>H</kbd> hides everything.</p>
+    <p class="hint" id="hint">Hold <kbd>space</kbd>, or press and hold the screen, while you breathe in. Let go as you breathe out. <kbd>Enter</kbd> starts a session, <kbd>J</kbd> opens the journal, <kbd>1</kbd>–<kbd>4</kbd> switch scenes, <kbd>C</kbd> coherence colour, <kbd>H</kbd> hides everything.</p>
   </footer>
 </div>
 
@@ -64,6 +67,27 @@
     <div class="live">
       <div class="live-head"><span class="k">Beat intervals, last minute</span><span class="u" id="beatInfo">no beats yet</span></div>
       <canvas id="wave" width="760" height="160"></canvas>
+    </div>
+  </div>
+</aside>
+
+<aside class="panel" id="pacePanel" hidden aria-labelledby="paceTitle">
+  <div class="panel-head">
+    <h2 id="paceTitle">Breathing pace</h2>
+    <button class="x" data-close="pacePanel" aria-label="Close">Close</button>
+  </div>
+  <div class="panel-body">
+    <p class="lede">Set your own timing. Changes apply straight away. Many people settle best somewhere between 4.5 and 7 breaths a minute, often with a slightly longer exhale.</p>
+    <div class="pace-rate"><b id="paceRate">6.0</b><span>breaths a minute</span></div>
+    <label class="field" for="inS"><span>Breathe in · <output id="inSV">5</output> s</span><input type="range" id="inS" min="2" max="10" step="0.5" value="5"></label>
+    <label class="field" for="holdIn"><span>Hold after in · <output id="holdInV">0</output> s</span><input type="range" id="holdIn" min="0" max="10" step="0.5" value="0"></label>
+    <label class="field" for="outS"><span>Breathe out · <output id="outSV">5</output> s</span><input type="range" id="outS" min="2" max="14" step="0.5" value="5"></label>
+    <label class="field" for="holdOut"><span>Hold after out · <output id="holdOutV">0</output> s</span><input type="range" id="holdOut" min="0" max="10" step="0.5" value="0"></label>
+    <div class="btns">
+      <button class="solo" data-preset="5,0,5,0">6 / min even</button>
+      <button class="solo" data-preset="4.5,0,5.5,0">6 / min long out</button>
+      <button class="solo" data-preset="5,0,6,0">5.5 / min</button>
+      <button class="solo" data-preset="5,0,7,0">5 / min</button>
     </div>
   </div>
 </aside>
@@ -90,6 +114,21 @@
       <label class="field" for="manualRank"><span>Fixed rank (when adapting is off)</span>
         <select id="manualRank"></select>
       </label>
+      <h3>Colour</h3>
+      <label class="field" for="tint"><span>Coherence colour in the visuals</span>
+        <select id="tint">
+          <option value="off">Off, the scene keeps its own colours</option>
+          <option value="soft">Soft tint and brightness</option>
+          <option value="strong">Strong tint and brightness</option>
+        </select>
+      </label>
+      <label class="field" for="palette"><span>Colour set for low / medium / high</span>
+        <select id="palette">
+          <option value="classic">Classic: orange, blue, green</option>
+          <option value="safe">Colour-blind safe: dark indigo, teal, bright yellow</option>
+        </select>
+      </label>
+      <p class="note">With a tint on, the whole scene shifts toward the colour of your current level, dims when you are scattered and glows when you are coherent. Brightness carries the meaning on its own, so the colour-blind safe set works without telling hues apart. <kbd>C</kbd> switches the tint.</p>
       <label class="field" for="colours"><span>Colours and visuals follow</span>
         <select id="colours">
           <option value="own">Breathfield's adaptive scale</option>

@@ -73,8 +73,16 @@ It tracks HeartMath's "entrainment parameter" from their patent, (peak power ÷ 
 peak) × (peak power ÷ power above it), times 100: computed on the emWave's own 2 Hz series it
 went 1078 → 4408 while `E` went 1156 → 3347. Longer recordings will pin this down.
 
-At challenge level 1, `S` switched to medium somewhere between `E` 47 and 65, and to high
-between 90 and 166.
+At challenge level 1 the emWave's zone follows `E` almost exactly. In a 7-minute session
+(77 verdicts) every `E` below 60 was low, 60 to 136 was medium and 156 or more was high, with a
+single exception (195 shown as medium, probably smoothing). So at level 1: **low < 60 ≤ medium
+< ~150 ≤ high**.
+
+Breathfield's own peak-share score does not line up with that verdict (it agreed 28 of 77
+times), and recomputing `E` from the beats reproduces the emWave's value only roughly (log
+correlation 0.63, same zone 58% of the time). Until more sessions pin down HeartMath's exact
+windowing, the setting *Colours and visuals follow → the emWave's own verdict* is the accurate
+choice whenever the emWave is connected.
 
 `tools/emwave_decode.py` turns a recording into a beats file for Kubios and a CSV of the
 emWave's verdicts. In the app, the emWave adapter emits the real beats into Breathfield's
