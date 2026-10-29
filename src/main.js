@@ -31,7 +31,7 @@ const now = () => performance.now() / 1000;
 const motion = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.45 : 1;
 
 const DEFAULT_SETTINGS = { scene: 0, pattern: 0, guide: true, volume: 0.6, sessionMin: 10, rollover: 3, device: 'practice', colours: 'own',
-  tint: 'soft', palette: 'classic', custom: { inS: 5, holdIn: 0, outS: 5, holdOut: 0 } };
+  tintMode: 'off', palette: 'classic', custom: { inS: 5, holdIn: 0, outS: 5, holdOut: 0 } };
 
 const app = {
   settings: { ...DEFAULT_SETTINGS },
@@ -90,6 +90,12 @@ async function connect(id) {
   app.emwave = null; renderEmwave();
   dev.addEventListener('beat', (e) => onBeat(dev, e.detail));
   dev.addEventListener('status', () => { if (app.device === dev) renderStatus(); });
+  dev.addEventListener('idle', () => {
+    if (app.device !== dev) return;
+    app.score = null; app.zone = null; app.emwave = null; renderEmwave();
+    toast(app.session ? 'The emWave stopped its session. Breathfield keeps recording; press the emWave\'s button to continue.' : 'The emWave is connected but not running a session. Press its button to start one.');
+  });
+  dev.addEventListener('active', () => { if (app.device === dev) { app.engine.reset(); toast('The emWave started a session.'); } });
   dev.addEventListener('verdict', (e) => {
     // The emWave's own low/medium/high and E, kept with the session to compare and calibrate.
     const v = e.detail, s = app.session;
@@ -335,7 +341,7 @@ function renderHud(br) {
 // Coherence colour over the scene: a hue tint plus brightness (dim when scattered, glow when coherent).
 let lastTint = '';
 function renderTint(level) {
-  const k = { off: 0, soft: 0.55, strong: 1 }[app.settings.tint] || 0;
+  const k = { off: 0, soft: 0.55, strong: 1 }[app.settings.tintMode] || 0;
   const known = app.score != null || followEmwave();
   const v = known ? level : 0.5;
   const c = levelColour(v);
@@ -356,6 +362,9 @@ function renderTint(level) {
 }
 
 function renderSecond() {
+  // A sensor that stops sending beats should not leave an old score on screen.
+  const lastBeat = app.beats.length ? app.beats[app.beats.length - 1].t : null;
+  if (app.score != null && app.device && (lastBeat == null || now() - lastBeat > 8)) { app.score = null; app.zone = null; }
   $('score').textContent = app.score == null ? '—' : Math.round(app.score);
   if (app.score == null && app.device) {
     const have = app.engine.beats.length ? now() - app.engine.beats[0].t : 0;
@@ -496,7 +505,7 @@ async function renderSettings() {
   $('manualRank').value = String(app.level.manualRank);
   $('sessionMin').value = String(app.settings.sessionMin);
   $('colours').value = app.settings.colours;
-  $('tint').value = app.settings.tint;
+  $('tint').value = app.settings.tintMode;
   $('palette').value = app.settings.palette;
   $('rollover').value = String(app.settings.rollover);
   $('volume').value = String(Math.round(app.settings.volume * 100));
@@ -579,7 +588,7 @@ function setPalette(v) {
   saveSettings();
 }
 $('palette').addEventListener('change', (e) => { setPalette(e.target.value); renderJournal(); });
-$('tint').addEventListener('change', (e) => { app.settings.tint = e.target.value; lastTint = ''; saveSettings(); });
+$('tint').addEventListener('change', (e) => { app.settings.tintMode = e.target.value; lastTint = ''; saveSettings(); });
 $('sensorBtn').addEventListener('click', () => openPanel('sensorPanel'));
 $('journalBtn').addEventListener('click', () => openPanel('journalPanel'));
 $('sessionBtn').addEventListener('click', () => (app.session ? endSession() : startSession()));
@@ -697,9 +706,9 @@ addEventListener('keydown', (e) => {
   else if (e.key === 'f' || e.key === 'F') toggleFull();
   else if (e.key === 'c' || e.key === 'C') {
     const order = ['off', 'soft', 'strong'];
-    app.settings.tint = order[(order.indexOf(app.settings.tint) + 1) % 3];
+    app.settings.tintMode = order[(order.indexOf(app.settings.tintMode) + 1) % 3];
     lastTint = ''; saveSettings();
-    toast(`Coherence colour: ${app.settings.tint}`);
+    toast(`Coherence colour: ${app.settings.tintMode}`);
   }
   else if (e.key === 'j' || e.key === 'J') ($('journalPanel').hidden ? openPanel('journalPanel') : closePanels());
 });

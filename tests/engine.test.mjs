@@ -62,10 +62,10 @@ test('artifacts are rejected', () => {
 
 test('thresholds and zones', () => {
   const th = thresholdsFor(1.5);
-  assert.deepEqual(th, { medium: 45, high: 65 });
-  assert.equal(zoneOf(44, th), 0);
-  assert.equal(zoneOf(50, th), 1);
-  assert.equal(zoneOf(70, th), 2);
+  assert.deepEqual(th, { medium: 32, high: 53 });
+  assert.equal(zoneOf(31, th), 0);
+  assert.equal(zoneOf(40, th), 1);
+  assert.equal(zoneOf(60, th), 2);
 });
 
 const sess = (high, extra = {}) => ({

@@ -78,11 +78,17 @@ At challenge level 1 the emWave's zone follows `E` almost exactly. In a 7-minute
 single exception (195 shown as medium, probably smoothing). So at level 1: **low < 60 ≤ medium
 < ~150 ≤ high**.
 
-Breathfield's own peak-share score does not line up with that verdict (it agreed 28 of 77
-times), and recomputing `E` from the beats reproduces the emWave's value only roughly (log
-correlation 0.63, same zone 58% of the time). Until more sessions pin down HeartMath's exact
-windowing, the setting *Colours and visuals follow → the emWave's own verdict* is the accurate
-choice whenever the emWave is connected.
+A 16-minute capture (198 verdicts) confirmed it: `E` with cutoffs 60 and 150 predicts the
+emWave's zone 197 times out of 198.
+
+Breathfield's coherence ratio, computed on the emWave's own 2 Hz series over 64 s with a Hann
+window, tracks `E` with a log correlation of 0.82. Breathfield's first thresholds (30 / 50)
+were too strict for level 1; refitting them to 17 / 35 makes Breathfield's colour match the
+emWave's 76% of the time. The setting *Colours and visuals follow → the emWave's own verdict*
+remains the exact choice whenever the emWave is connected.
+
+With no session running on the handheld the emWave sends only keep-alives. Breathfield notices
+after 5 seconds and asks you to start one.
 
 `tools/emwave_decode.py` turns a recording into a beats file for Kubios and a CSV of the
 emWave's verdicts. In the app, the emWave adapter emits the real beats into Breathfield's
