@@ -1,6 +1,6 @@
 # Breathfield
 
-Generative breathing visuals with a pacer. Your heart's coherence steers six trippy scenes:
+Generative breathing visuals with a pacer. Your heart's coherence steers seven trippy scenes:
 when your rhythm is scattered the picture is restless and grey, and when it settles it turns
 symmetric, saturated and calm. Sessions go into a journal with streaks, adaptive ranks and
 repeatable badges (×2, ×10 …).
@@ -36,7 +36,7 @@ How the emWave's USB data is decoded: [docs/DEVICES.md](docs/DEVICES.md).
 
 ## Keys
 
-`Space` hold while breathing in · `Enter` start or end a session · `1`–`6` scenes ·
+`Space` hold while breathing in · `Enter` start or end a session · `1`–`7` scenes ·
 `C` coherence colour · `,` settings · `J` journal · `G` pacer ring · `H` hide everything · `F` fullscreen · `Esc` close panels
 
 ## Your data
