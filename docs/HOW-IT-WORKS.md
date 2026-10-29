@@ -24,8 +24,11 @@ scores 20–30, a faint breathing rhythm 50–65, and calm 6-per-minute breathin
 `src/engine/levels.js`. A difficulty `d` from 0 to 4 sets the thresholds:
 
 ```
-medium ≥ 30 + 10·d       high ≥ 50 + 10·d
+medium ≥ 17 + 10·d       high ≥ 35 + 12·d
 ```
+
+Gentle (d = 0) is calibrated against the emWave 2 at its lowest challenge level: over a
+16-minute session these cutoffs gave the same colour as the emWave for 76% of its verdicts.
 
 The whole part of `d` is your rank: Gentle (0), Steady (1), Deep (2), Master (3). The fraction is
 your progress inside the rank.

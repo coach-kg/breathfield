@@ -97,6 +97,8 @@ export class EmWaveHid extends Device {
     this.parser.reset();
     this.lastBeatT = null;
     this.lastStatus = null;
+    this.lastTextT = null;
+    this.idle = false;
     this.started = performance.now() / 1000;
     this._onReport = (e) => this.onReport(e);
     dev.addEventListener('inputreport', this._onReport);
@@ -116,10 +118,21 @@ export class EmWaveHid extends Device {
     const bytes = e.reportId ? Uint8Array.from([e.reportId, ...data]) : data;
     if (this.packets.length < 200000) this.packets.push({ t: +(t - this.started).toFixed(4), hex: hex(bytes) });
     if (bytes[0] === 0x75) {
-      if (!this.hadText && this.packets.length > 3) {
-        this.status(`${this.label} is connected. Start a session on the emWave and put your finger or the ear clip on the sensor.`, 'warn');
+      // Keep-alives only: no session is running on the handheld (never started, or ended).
+      const quiet = t - (this.lastTextT ?? this.started);
+      if (quiet > 5 && !this.idle) {
+        this.idle = true;
+        this.lastBeatT = null;
+        this.emit('idle', { t });
+        this.status(`${this.label} is connected, but no session is running on it. Press the emWave's button to start one, then put your finger or the ear clip on the sensor.`, 'warn');
       }
       return;
+    }
+    this.lastTextT = t;
+    if (this.idle) {
+      this.idle = false;
+      this.emit('active', { t });
+      this.status(`${this.label}: session running, waiting for the first beats…`, 'busy');
     }
     for (const m of this.parser.push(bytes)) this.handle(m, t);
   }

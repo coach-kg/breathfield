@@ -3,7 +3,11 @@
 // A continuous difficulty `d` (0..4) sets the two thresholds that split a
 // coherence score into low / medium / high:
 //
-//   medium >= 30 + 10·d      high >= 50 + 10·d
+//   medium >= 17 + 10·d      high >= 35 + 12·d
+//
+// Gentle (d = 0) is calibrated against the emWave 2 at its challenge level 1:
+// over a 16-minute session these cutoffs gave the same low / medium / high as
+// the emWave for 76% of its 5-second verdicts (see docs/DEVICES.md).
 //
 // The whole part of d is the rank (Gentle, Steady, Deep, Master); the
 // fraction is your progress inside that rank. After each qualifying session
@@ -30,7 +34,7 @@ export const MIN_ADAPT_SEC = 180;
 
 export function thresholdsFor(d) {
   const x = Math.min(D_MAX, Math.max(0, d));
-  return { medium: 30 + 10 * x, high: 50 + 10 * x };
+  return { medium: 17 + 10 * x, high: 35 + 12 * x };
 }
 
 export function zoneOf(score, th) {
