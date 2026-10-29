@@ -22,7 +22,7 @@ const fmtMin = (m) => (m >= 90 ? `${(m / 60).toFixed(1)} h` : `${Math.round(m)} 
 const now = () => performance.now() / 1000;
 const motion = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.45 : 1;
 
-const DEFAULT_SETTINGS = { scene: 0, pattern: 0, guide: true, volume: 0.6, sessionMin: 10, rollover: 3, device: 'practice' };
+const DEFAULT_SETTINGS = { scene: 0, pattern: 0, guide: true, volume: 0.6, sessionMin: 10, rollover: 3, device: 'practice', colours: 'own' };
 
 const app = {
   settings: { ...DEFAULT_SETTINGS },
@@ -43,7 +43,11 @@ const app = {
   hist: [],
   beats: [],
   session: null,
+  emwave: null, // latest verdict from a connected emWave {zone, entrainment, level, achievement, t}
 };
+
+const followEmwave = () => app.settings.colours === 'emwave' && app.deviceId === 'emwave' && app.emwave && now() - app.emwave.t < 15;
+const shownZone = () => (followEmwave() ? app.emwave.zone : app.zone);
 
 // ---------------------------------------------------------------- devices
 
@@ -74,12 +78,16 @@ async function connect(id) {
   app.device = dev;
   app.engine.reset();
   app.score = null; app.zone = null; app.hr = null; app.beats = [];
+  app.emwave = null; renderEmwave();
   dev.addEventListener('beat', (e) => onBeat(dev, e.detail));
   dev.addEventListener('status', () => { if (app.device === dev) renderStatus(); });
   dev.addEventListener('verdict', (e) => {
     // The emWave's own low/medium/high and E, kept with the session to compare and calibrate.
     const v = e.detail, s = app.session;
-    if (app.device === dev && s) s.emwave.push([+(v.t - s.t0).toFixed(1), v.zone, v.entrainment, v.level, v.achievement]);
+    if (app.device !== dev) return;
+    app.emwave = v;
+    renderEmwave();
+    if (s) s.emwave.push([+(v.t - s.t0).toFixed(1), v.zone, v.entrainment, v.level, v.achievement]);
   });
   renderStatus();
   renderDevices();
@@ -192,6 +200,17 @@ function evaluateBadges() {
   return evaluate(app.sessions, app.level, { rollover: app.settings.rollover, patternCount: PATTERNS.length });
 }
 
+/** "The emWave said: high 80% · medium 15% · low 5%" for sessions recorded with it. */
+function ewLine(rec) {
+  const e = rec.emwave;
+  if (!e || !e.length) return '';
+  const c = [0, 0, 0];
+  e.forEach((x) => { if (c[x[1]] != null) c[x[1]]++; });
+  const pc = (n) => Math.round((100 * n) / e.length);
+  const t = rec.timeIn, sum = t[0] + t[1] + t[2] || 1;
+  return `<p class="msg">The emWave said high ${pc(c[2])}%, medium ${pc(c[1])}%, low ${pc(c[0])}% of the time. Breathfield said high ${Math.round((100 * t[2]) / sum)}%.</p>`;
+}
+
 function showSummary(rec, events, fresh) {
   const t = rec.timeIn, scored = t[0] + t[1] + t[2];
   const pct = (x) => (scored ? (100 * x) / scored : 0);
@@ -215,6 +234,7 @@ function showSummary(rec, events, fresh) {
     ${scored ? `<div><div class="zonebar"><i style="width:${pct(t[0])}%"></i><i style="width:${pct(t[1])}%"></i><i style="width:${pct(t[2])}%"></i></div>
       <div class="legend" style="margin-top:8px"><span><i style="background:var(--low)"></i>low ${fmtClock(t[0])}</span><span><i style="background:var(--mid)"></i>medium ${fmtClock(t[1])}</span><span><i style="background:var(--high)"></i>high ${fmtClock(t[2])}</span></div></div>` : ''}
     <p class="msg">${rankMsg}</p>
+    ${ewLine(rec)}
     ${badgeHtml}
     <div class="btns"><button class="solo primary" id="sumClose">Done</button><button class="solo" id="sumJournal">Open journal</button></div>`;
   $('summary').hidden = false;
@@ -228,6 +248,15 @@ function showSummary(rec, events, fresh) {
 function badgeCard(b) {
   const times = b.count > 1 ? `<span class="times">×${b.count}</span>` : '';
   return `<div class="badge ${b.count ? '' : 'locked'}" title="${esc(b.desc)}">${badgeGlyph(b, 44)}<b>${esc(b.name)}${times}</b><span>${esc(b.desc)}</span></div>`;
+}
+
+function renderEmwave() {
+  const v = app.emwave;
+  $('ewRow').hidden = !v;
+  if (!v) return;
+  $('ewDot').dataset.z = v.zone;
+  $('ewZone').textContent = ZONE_NAMES[v.zone] || '—';
+  $('ewE').textContent = v.entrainment != null ? `E ${v.entrainment}` : '';
 }
 
 function renderStatus() {
@@ -283,7 +312,8 @@ function renderHud(br) {
   const cw = $('cueWrap');
   cw.style.opacity = o.toFixed(3);
   cw.style.transform = `translate(-50%,-50%) scale(${(0.92 + 0.12 * br.b).toFixed(3)})`;
-  const lvl = app.zone == null ? 0 : app.zone + 1;
+  const z = shownZone();
+  const lvl = z == null ? 0 : z + 1;
   if (lvl !== lastLvl) {
     $('meter').dataset.lvl = lvl;
     $('lvl').textContent = lvl ? ZONE_NAMES[lvl - 1] : 'warming up';
@@ -432,6 +462,7 @@ async function renderSettings() {
   $('manualRank').disabled = app.level.adaptive;
   $('manualRank').value = String(app.level.manualRank);
   $('sessionMin').value = String(app.settings.sessionMin);
+  $('colours').value = app.settings.colours;
   $('rollover').value = String(app.settings.rollover);
   $('volume').value = String(Math.round(app.settings.volume * 100));
   $('backupBtn').hidden = !store.canBackupToFile();
@@ -516,6 +547,7 @@ $('manualRank').addEventListener('change', async (e) => {
   app.level = { ...app.level, manualRank: +e.target.value };
   await store.set('level', app.level); renderJournal();
 });
+$('colours').addEventListener('change', (e) => { app.settings.colours = e.target.value; saveSettings(); });
 $('sessionMin').addEventListener('change', (e) => { app.settings.sessionMin = +e.target.value; saveSettings(); });
 $('rollover').addEventListener('change', (e) => { app.settings.rollover = +e.target.value; saveSettings(); app.badges = evaluateBadges(); renderJournal(); });
 $('volume').addEventListener('input', (e) => { app.settings.volume = e.target.value / 100; drone.volume = app.settings.volume; saveSettings(); });
@@ -627,7 +659,8 @@ new p5((p) => {
     app.breathB = br.b;
     const r = app.engine.update(t);
     if (r) onScore(r);
-    const target = app.score == null ? 0.3 : visualLevel(app.score, currentThresholds());
+    const target = followEmwave() ? [0.18, 0.5, 0.85][app.emwave.zone] ?? 0.3
+      : app.score == null ? 0.3 : visualLevel(app.score, currentThresholds());
     app.visual += (target - app.visual) * Math.min(1, dt * 0.6);
     hue += sdt * (0.006 + 0.02 * (1 - app.visual));
     travel += sdt * (0.2 + 0.55 * br.b);

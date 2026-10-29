@@ -27,6 +27,7 @@
       <canvas id="spark" width="300" height="68" aria-label="Coherence over the last two minutes"></canvas>
       <div class="row"><span class="k">Heart</span><span id="hr">—</span><span class="u">bpm</span></div>
       <div class="row"><span class="k">Pace</span><span id="rate">6.0</span><span class="u">/min</span></div>
+      <div class="row" id="ewRow" hidden><span class="k">emWave</span><i class="ewdot" id="ewDot"></i><span id="ewZone">—</span><span class="u" id="ewE"></span></div>
       <div class="row"><span class="k">Rank</span><span id="rank">Gentle</span><span class="u" id="rankD">0.0</span></div>
       <div class="row"><span class="k">Session</span><span id="clock">not recording</span></div>
       <div class="src" id="src">Starting…</div>
@@ -89,6 +90,13 @@
       <label class="field" for="manualRank"><span>Fixed rank (when adapting is off)</span>
         <select id="manualRank"></select>
       </label>
+      <label class="field" for="colours"><span>Colours and visuals follow</span>
+        <select id="colours">
+          <option value="own">Breathfield's adaptive scale</option>
+          <option value="emwave">The emWave's own verdict, when connected</option>
+        </select>
+      </label>
+      <p class="note">With the emWave connected you always see both: Breathfield's score at the top, the emWave's colour on the line below. Every session keeps both, which is what calibration uses.</p>
       <h3>Sessions</h3>
       <label class="field" for="sessionMin"><span>Session length</span>
         <select id="sessionMin">
