@@ -84,7 +84,15 @@ void main(){
   gl_FragColor = vec4(col, 1.0);
 }`;
 
+// Two quality profiles. Light keeps the same look with fewer elements, a
+// lower shader resolution and a cheap fake blur, for phones and slow machines.
+export const QUALITY = {
+  full: { gl: 1, swarm: 1, flow: 1, lineLayers: 5, linePts: 1100, blur: true },
+  light: { gl: 0.62, swarm: 0.45, flow: 0.45, lineLayers: 3, linePts: 560, blur: false },
+};
+
 export function createScenes(p) {
+  let Q = QUALITY.full;
   let pg = null, shM = null, shT = null;
   let glOK = true;
   const sw = {};
@@ -92,7 +100,7 @@ export function createScenes(p) {
   function makeGL() {
     if (!glOK) return;
     try {
-      const q = p.width * p.height > 2.0e6 ? 0.45 : 0.6;
+      const q = (p.width * p.height > 2.0e6 ? 0.45 : 0.6) * Q.gl;
       if (pg) pg.remove();
       pg = p.createGraphics(Math.max(2, Math.floor(p.width * q)), Math.max(2, Math.floor(p.height * q)), p.WEBGL);
       pg.pixelDensity(1);
@@ -105,7 +113,7 @@ export function createScenes(p) {
   }
 
   function initSwarm() {
-    const n = p.width * p.height > 1.2e6 ? 2200 : 1400;
+    const n = Math.round((p.width * p.height > 1.2e6 ? 2200 : 1400) * Q.swarm);
     sw.n = n;
     sw.a = new Float32Array(n); sw.r = new Float32Array(n); sw.k = new Float32Array(n);
     sw.s = new Float32Array(n); sw.x = new Float32Array(n); sw.y = new Float32Array(n);
@@ -204,7 +212,7 @@ export function createScenes(p) {
     const damp = Math.pow(0.15, f.dt);
     view.vyaw *= damp; view.vpitch *= damp;
     const R = md * 0.34 * (0.8 + 0.2 * f.b) * view.zoom;
-    const layers = 5, N = 1100;
+    const layers = Q.lineLayers, N = Q.linePts;
     ctx.globalCompositeOperation = 'lighter';
     ctx.lineJoin = 'round';
     const cyw = Math.cos(view.yaw), syw = Math.sin(view.yaw), cp = Math.cos(view.pitch), sp = Math.sin(view.pitch);
@@ -215,8 +223,9 @@ export function createScenes(p) {
       const col = `hsla(${hue.toFixed(0)},${(35 + 55 * coh).toFixed(0)}%,${(58 + 14 * coh).toFixed(0)}%,${(0.14 + 0.3 * coh).toFixed(3)})`;
       ctx.strokeStyle = col;
       ctx.shadowColor = col;
-      ctx.shadowBlur = 2 + 16 * chaos;
+      ctx.shadowBlur = Q.blur ? 2 + 16 * chaos : 0;
       ctx.lineWidth = 0.8 + 1.4 * coh;
+      const path = new Path2D();
       ctx.beginPath();
       for (let i = 0; i <= N; i++) {
         const a = (i / N) * TAU;
@@ -230,9 +239,17 @@ export function createScenes(p) {
         const y2 = Y * cp - z1 * sp, z2 = Y * sp + z1 * cp;
         const s = fov / (fov + z2);
         const px = W / 2 + x1 * s, py = H / 2 + y2 * s;
-        i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+        i ? path.lineTo(px, py) : path.moveTo(px, py);
       }
-      ctx.stroke();
+      if (!Q.blur && chaos > 0.15) {
+        // Cheap stand-in for the blur: a wide, faint copy underneath.
+        ctx.save();
+        ctx.lineWidth = 2 + 14 * chaos;
+        ctx.globalAlpha = 0.12 * chaos;
+        ctx.stroke(path);
+        ctx.restore();
+      }
+      ctx.stroke(path);
     }
     ctx.shadowBlur = 0;
   }
@@ -242,7 +259,7 @@ export function createScenes(p) {
   // slow vortex around the centre. Breath sets the speed.
   const fl = { n: 0 };
   function initFlow() {
-    const n = p.width * p.height > 1.2e6 ? 2600 : 1600;
+    const n = Math.round((p.width * p.height > 1.2e6 ? 2600 : 1600) * Q.flow);
     fl.n = n;
     fl.x = new Float32Array(n); fl.y = new Float32Array(n); fl.s = new Float32Array(n);
     for (let i = 0; i < n; i++) { fl.x[i] = Math.random() * p.width; fl.y[i] = Math.random() * p.height; fl.s[i] = 0.5 + Math.random(); }
@@ -285,6 +302,7 @@ export function createScenes(p) {
     zoomBy(dy) { view.zoom = Math.max(0.5, Math.min(2.2, view.zoom * Math.exp(-dy * 0.0012))); },
     resetView() { Object.assign(view, { yaw: 0, pitch: 0.35, vyaw: 0, vpitch: 0, zoom: 1 }); },
     resize() { makeGL(); initSwarm(); initFlow(); },
+    setQuality(name) { Q = QUALITY[name] || QUALITY.full; },
     clear() { p.background(6, 5, 10); },
     /** f: {scene, b, coh, T, dt, hue, travel} */
     draw(f) {
