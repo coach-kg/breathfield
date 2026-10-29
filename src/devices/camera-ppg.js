@@ -35,11 +35,7 @@ export class CameraPpg extends Device {
     this.track = this.stream.getVideoTracks()[0];
     this.torch = false;
     this.torchSupported = false;
-    try {
-      const caps = this.track.getCapabilities ? this.track.getCapabilities() : {};
-      this.torchSupported = !!caps.torch;
-      if (caps.torch) { await this.track.applyConstraints({ advanced: [{ torch: true }] }); this.torch = true; }
-    } catch (e) { /* no light control */ }
+    this.torchNote = '';
     // Which lens is this, and which others are there? (labels are readable once access is granted)
     try {
       const all = await navigator.mediaDevices.enumerateDevices();
@@ -57,10 +53,16 @@ export class CameraPpg extends Device {
     v.setAttribute('aria-label', 'Camera preview');
     await v.play();
     this.video = v;
+    // Some Android browsers only report the flashlight once the camera is
+    // running, or after ImageCapture has looked at it. Ask both ways.
+    await new Promise((r) => setTimeout(r, 400));
+    await this.detectTorch();
+    if (this.torchSupported) await this.setTorch(true);
     this.canvas = document.createElement('canvas');
     this.canvas.width = 32; this.canvas.height = 24;
     this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
     this.detector = new BeatDetector({ invert: true });
+    this.trace = [];
     this.finger = false;
     this.running = true;
     this.status(this.torch
@@ -96,6 +98,8 @@ export class CameraPpg extends Device {
         if (finger) this.status(`Finger detected${this.torch ? '' : ' (no light)'}. Hold still and relax your hand…`, 'on');
         else { this.status('Place your fingertip over the camera.', 'warn'); this.detector.reset(); }
       }
+      this.trace.push([t, -r, finger]);
+      while (this.trace.length && this.trace[0][0] < t - 6) this.trace.shift();
       if (finger) {
         this.emit('pulse', { t, v: -r });
         const beat = this.detector.push(t, r);
@@ -105,10 +109,39 @@ export class CameraPpg extends Device {
     this._next();
   }
 
-  /** Switch the flashlight on or off where the browser allows it. */
+  async detectTorch() {
+    let caps = {};
+    try { caps = this.track.getCapabilities ? this.track.getCapabilities() : {}; } catch (e) { /* not available */ }
+    let photo = null;
+    if (!caps.torch && 'ImageCapture' in window) {
+      try { photo = await new window.ImageCapture(this.track).getPhotoCapabilities(); } catch (e) { /* not available */ }
+      try { caps = this.track.getCapabilities ? this.track.getCapabilities() : {}; } catch (e) { /* not available */ }
+    }
+    this.torchSupported = !!caps.torch;
+    this.diag = {
+      lens: this.lens || this.track.label,
+      facing: (this.track.getSettings && this.track.getSettings().facingMode) || '?',
+      torch: caps.torch ? 'offered' : 'not offered',
+      fill: photo && photo.fillLightMode ? photo.fillLightMode.join('/') : '–',
+      fps: (this.track.getSettings && this.track.getSettings().frameRate) || '?',
+      imageCapture: 'ImageCapture' in window,
+    };
+  }
+
+  /** Switch the flashlight on or off. Also tries when the browser does not advertise it. */
   async setTorch(on) {
-    if (!this.torchSupported) return false;
-    try { await this.track.applyConstraints({ advanced: [{ torch: on }] }); this.torch = on; return true; } catch (e) { return false; }
+    try {
+      await this.track.applyConstraints({ advanced: [{ torch: on }] });
+      // Chrome accepts unknown constraints silently, so check what actually happened.
+      const s = this.track.getSettings ? this.track.getSettings() : {};
+      this.torch = s.torch === undefined ? on && this.torchSupported : !!s.torch;
+      this.torchNote = on && !this.torch ? 'The browser did not switch the light on for this camera.' : '';
+      return this.torch === on;
+    } catch (e) {
+      this.torch = false;
+      this.torchNote = 'The browser refused to switch the light on for this camera.';
+      return false;
+    }
   }
 
   async disconnect() {

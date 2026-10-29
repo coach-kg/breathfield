@@ -91,6 +91,12 @@ async function connect(id) {
   app.score = null; app.zone = null; app.hr = null; app.beats = [];
   app.emwave = null; renderEmwave();
   dev.addEventListener('beat', (e) => onBeat(dev, e.detail));
+  dev.addEventListener('pulse', (e) => {
+    const s = app.session;
+    if (app.device !== dev || !s) return;
+    const t = e.detail.t - s.t0;
+    if (!s.ppg.length || t - s.ppg[s.ppg.length - 1][0] >= 1 / 15) s.ppg.push([+t.toFixed(3), +e.detail.v.toFixed(2)]);
+  });
   dev.addEventListener('status', () => { if (app.device === dev) renderStatus(); });
   dev.addEventListener('idle', () => {
     if (app.device !== dev) return;
@@ -198,6 +204,7 @@ function startSession() {
     scores: [],
     hrs: [],
     ibis: [],
+    ppg: [],
     emwave: [],
   };
   const b = $('sessionBtn');
@@ -223,7 +230,7 @@ async function endSession(auto = false) {
     pattern: s.pattern, patternId: s.patternId, ...(s.customSteps ? { customSteps: s.customSteps } : {}), scenes: [...s.scenes],
     d: s.d, thresholds: s.thresholds,
     timeIn: s.timeIn, avgScore: avg(s.scores.map((x) => x[1])), avgHr: avg(s.hrs),
-    scores: s.scores, ibis: s.ibis, ...(s.emwave.length ? { emwave: s.emwave } : {}), endedBy: auto ? 'timer' : 'you',
+    scores: s.scores, ibis: s.ibis, ...(s.emwave.length ? { emwave: s.emwave } : {}), ...(s.ppg.length ? { ppg: s.ppg } : {}), endedBy: auto ? 'timer' : 'you',
   };
   if (rec.avgScore != null) rec.avgScore = +rec.avgScore.toFixed(1);
   if (rec.avgHr != null) rec.avgHr = +rec.avgHr.toFixed(1);
@@ -323,7 +330,7 @@ function renderDevices() {
     const st = active ? `<div class="st" data-state="${app.device.state}">${esc(app.device.text || '')}</div>` : '';
     let extra = d.id === 'emwave' && active ? `<button class="solo" data-capture>Save raw recording (${app.device.packets.length} packets)</button>` : '';
     if (d.id === 'camera' && active) {
-      if (app.device.torchSupported) extra += `<button class="solo" data-torch aria-pressed="${app.device.torch}">Flashlight ${app.device.torch ? 'on' : 'off'}</button>`;
+      if (!app.device.front) extra += `<button class="solo" data-torch aria-pressed="${app.device.torch}">${app.device.torch ? 'Flashlight on' : app.device.torchSupported ? 'Flashlight off' : 'Try flashlight'}</button>`;
       extra += `<button class="solo" data-screenlight aria-pressed="${app.settings.screenLight}">Screen light ${app.settings.screenLight ? 'on' : 'off'}</button>`;
     }
     if (d.id === 'camera' && active && app.device.cameras && app.device.cameras.length > 1) {
@@ -337,7 +344,9 @@ function renderDevices() {
       <div class="btns">
         ${active ? `<button class="solo" data-disconnect="${d.id}">Disconnect</button>` : `<button class="solo primary" data-connect="${d.id}" ${why ? 'disabled' : ''}>Use this</button>`}
         ${extra}
-      </div>${d.id === 'camera' && active ? '<div class="campreview-slot"></div>' : ''}</div>`;
+      </div>${d.id === 'camera' && active ? `<div class="camrow"><div class="campreview-slot"></div><canvas id="ppgTrace" width="480" height="150" aria-label="Pulse signal from the camera, last 6 seconds"></canvas></div>
+        ${app.device.torchNote ? `<p class="why">${esc(app.device.torchNote)}</p>` : ''}
+        ${app.device.diag ? `<p class="diag">${esc(app.device.diag.lens)} · facing ${esc(app.device.diag.facing)} · light ${esc(app.device.diag.torch)} · fill ${esc(app.device.diag.fill)} · ${esc(String(app.device.diag.fps))} fps</p>` : ''}` : ''}</div>`;
   }).join('');
   const slot = list.querySelector('.campreview-slot');
   if (slot && app.device && app.device.video) slot.appendChild(app.device.video);
@@ -460,6 +469,36 @@ function drawSpark() {
   x.beginPath(); pts.forEach(([px, py], i) => (i ? x.lineTo(px + off, py) : x.moveTo(px + off, py)));
   x.strokeStyle = col; x.lineWidth = 2.5; x.stroke();
   x.fillStyle = col; x.beginPath(); x.arc(w - 8, pts[pts.length - 1][1], 4.5, 0, Math.PI * 2); x.fill();
+}
+
+/** Raw camera signal, last 6 s: a clear, regular wave means a good reading. */
+function drawPpgTrace() {
+  const c = $('ppgTrace');
+  if (!c || !app.device || !app.device.trace) return;
+  const x = c.getContext('2d'), w = c.width, h = c.height, tr = app.device.trace;
+  x.clearRect(0, 0, w, h);
+  if (tr.length < 5) return;
+  const t1 = tr[tr.length - 1][0], t0 = t1 - 6;
+  const vals = tr.filter((p) => p[2]).map((p) => p[1]);
+  if (vals.length < 5) { x.fillStyle = css('--mute'); x.font = '22px ' + css('--f-mono'); x.fillText('no finger on the lens', 16, h / 2); return; }
+  // Remove the slow drift so the heartbeat wiggle fills the box.
+  let lo = Infinity, hi = -Infinity;
+  const pts = [];
+  for (let i = 0; i < tr.length; i++) {
+    if (!tr[i][2]) continue;
+    let s = 0, n = 0;
+    for (let j = Math.max(0, i - 15); j <= Math.min(tr.length - 1, i + 15); j++) { s += tr[j][1]; n++; }
+    const v = tr[i][1] - s / n;
+    pts.push([tr[i][0], v]); lo = Math.min(lo, v); hi = Math.max(hi, v);
+  }
+  const span = Math.max(0.3, hi - lo);
+  x.strokeStyle = css('--accent'); x.lineWidth = 3;
+  x.beginPath();
+  pts.forEach(([t, v], i) => { const px = ((t - t0) / 6) * w, py = h - 10 - ((v - lo) / span) * (h - 20); i ? x.lineTo(px, py) : x.moveTo(px, py); });
+  x.stroke();
+  // Mark detected beats.
+  x.fillStyle = css('--ink');
+  for (const b of app.beats) if (b.t >= t0) { const px = ((b.t - t0) / 6) * w; x.fillRect(px - 1, 0, 2, 12); }
 }
 
 function drawWave() {
@@ -903,6 +942,7 @@ new p5((p) => {
     }
     renderHud(br);
     renderBeatLight();
+    if (app.deviceId === 'camera' && !$('sensorPanel').hidden) drawPpgTrace();
     renderTint(app.visual);
     drone.update(br.b, app.score == null ? null : app.visual);
     if (app.session && app.session.lengthMin && t - app.session.t0 >= app.session.lengthMin * 60) endSession(true);
