@@ -296,78 +296,112 @@ export function createScenes(p) {
     }
   }
 
-  // Golden: a sunflower head (phyllotaxis). Seed n sits at angle n × the golden
-  // angle and radius √n, which draws the interlocking Fibonacci spirals
-  // (8, 13, 21, 34 …). Seeds are born in the centre and drift outward forever,
-  // an endless zoom. Coherence decides how exact the golden angle is: a few
-  // tenths of a degree off and the spirals fall apart into rays and noise;
-  // settle, and the order grows back. Breath sets the drift speed and glow;
-  // faint golden spirals turn above it when you are coherent.
-  const GOLDEN = Math.PI * (3 - Math.sqrt(5)); // 137.507…°
+  // Golden: the golden "snail". A golden rectangle cut into squares, a quarter
+  // circle in each, spiralling inward forever. The figure is self-similar:
+  // scale it by φ and turn it a quarter turn and it lands on itself, so the
+  // zoom runs on without end. Several arms and their mirror images make a
+  // vortex. Coherent: crisp, aligned, with smaller spirals nested in the
+  // squares like a fractal. Scattered: the lines wobble, the arms drift out of
+  // line and the colours split apart. Breathing in pulls you deeper.
   const PHI = (1 + Math.sqrt(5)) / 2;
-  const gd = { flow: 0, err: 0, rot: 0 };
+  const GS = (() => {
+    // Build squares from a large golden rectangle inward; each entry: square
+    // corners and its arc (centre, radius, start and end angle).
+    let x = 0, y = 0, w = PHI, h = 1;
+    const sq = [];
+    for (let k = 0; k < 40; k++) {
+      const d = k % 4;
+      if (d === 0) { const s = h; sq.push({ x, y, s, cx: x + s, cy: y + s, a0: Math.PI, a1: 1.5 * Math.PI }); x += s; w -= s; }
+      else if (d === 1) { const s = w; sq.push({ x, y, s, cx: x, cy: y + s, a0: 1.5 * Math.PI, a1: 2 * Math.PI }); y += s; h -= s; }
+      else if (d === 2) { const s = h; sq.push({ x: x + w - s, y, s, cx: x + w - s, cy: y, a0: 0, a1: 0.5 * Math.PI }); w -= s; }
+      else { const s = w; sq.push({ x, y: y + h - s, s, cx: x + s, cy: y + h - s, a0: 0.5 * Math.PI, a1: Math.PI }); h -= s; }
+    }
+    const ex = x + w / 2, ey = y + h / 2; // where everything converges
+    const v0 = [sq[0].x + sq[0].s / 2 - ex, sq[0].y + sq[0].s / 2 - ey];
+    const v1 = [sq[1].x + sq[1].s / 2 - ex, sq[1].y + sq[1].s / 2 - ey];
+    const turn = Math.atan2(v1[1], v1[0]) - Math.atan2(v0[1], v0[0]); // one step inward turns by this
+    return { sq, ex, ey, turn };
+  })();
+  const gs = { T: 0, jit: 0 };
   function golden(f) {
     const ctx = p.drawingContext, W = p.width, H = p.height, cx = W / 2, cy = H / 2;
     const md = Math.min(W, H), coh = f.coh, chaos = 1 - coh;
     ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = `rgba(6,5,10,${0.32 + 0.2 * coh})`;
+    ctx.fillStyle = `rgba(6,5,10,${0.22 + 0.18 * coh})`;
     ctx.fillRect(0, 0, W, H);
-    const N = Q.seeds;
-    gd.flow += f.dt * (1.2 + 5 * f.b) * (N / 900);
-    // The angle error wanders on its own; coherence shrinks it toward zero.
-    const wander = p.noise(f.T * 0.05) - 0.5;
-    gd.err += ((wander * 0.03 + 0.012) * chaos * chaos - gd.err) * Math.min(1, f.dt * 0.5);
-    const ang = GOLDEN + gd.err;
-    gd.rot += f.dt * 0.03;
-    const R = md * 0.5 * (0.92 + 0.08 * f.b);
-    const c = R / Math.sqrt(N);
-    const base = f.hue;
+    // Breathing in carries you deeper; the zoom never stops.
+    gs.T += f.dt * (0.05 + 0.22 * f.b);
+    const fr = gs.T % 1, layer = Math.floor(gs.T);
+    const unit = md * 0.55 * Math.pow(PHI, fr) * Math.pow(PHI, 6); // start ~6 squares outside the screen
+    const rotZoom = -GS.turn * fr + f.T * 0.02;
+    const arms = 3;
+    ctx.lineCap = 'round';
     ctx.globalCompositeOperation = 'lighter';
-    const buckets = 8;
-    const paths = Array.from({ length: buckets }, () => new Path2D());
-    for (let k = 0; k < N; k++) {
-      // s grows continuously; wrapping returns a seed to the centre as a new one.
-      const s = ((k + gd.flow) % N) + 0.5;
-      const r = c * Math.sqrt(s);
-      // Scattered: every seed drifts off its place on its own; coherent: all in line.
-      const wob = p.noise(k * 0.21, f.T * 0.25) - 0.5;
-      const a = s * ang + gd.rot + chaos * chaos * 0.9 * wob;
-      const j = chaos * md * 0.035 * (p.noise(k * 0.13, f.T * 0.3) - 0.5);
-      const x = cx + Math.cos(a) * (r + j), y = cy + Math.sin(a) * (r + j);
-      const size = (0.6 + 2.6 * Math.sqrt(s / N)) * (0.9 + 0.3 * f.b);
-      const bucket = Math.floor(((s / PHI) % 1) * buckets);
-      paths[bucket].moveTo(x + size, y);
-      paths[bucket].arc(x, y, size, 0, TAU);
-    }
-    for (let q = 0; q < buckets; q++) {
-      const hue = ((base + q / buckets * (0.18 + 0.5 * chaos)) % 1) * 360;
-      ctx.fillStyle = `hsla(${hue.toFixed(0)},${(30 + 60 * coh).toFixed(0)}%,${(55 + 15 * coh).toFixed(0)}%,${(0.35 + 0.35 * coh).toFixed(3)})`;
-      ctx.fill(paths[q]);
-    }
-    // Golden spirals (r grows by φ every quarter turn), visible when coherent.
-    if (coh > 0.35) {
-      ctx.lineWidth = 1.2;
-      ctx.strokeStyle = `rgba(239,234,255,${((coh - 0.35) * 0.35 * (0.6 + 0.4 * f.b)).toFixed(3)})`;
-      const k = Math.log(PHI) / (Math.PI / 2);
-      for (let arm = 0; arm < 5; arm++) {
-        ctx.beginPath();
-        for (let i = 0; i <= 160; i++) {
-          const th = (i / 160) * 4.5 * Math.PI;
-          const r = md * 0.012 * Math.exp(k * th);
-          if (r > R * 1.05) break;
-          const a = th + (arm * TAU) / 5 - gd.rot * 2 - gd.flow * 0.004;
-          const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
-          i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    // Colour split when scattered: three passes nudged apart.
+    const split = chaos * chaos * md * 0.012;
+    const passes = split > 0.6 ? [[split, 0, '255,90,90'], [-split, 0, '90,200,255'], [0, split, '140,255,160']] : [[0, 0, null]];
+    for (const [ox, oy, tintRGB] of passes) {
+      for (let arm = 0; arm < arms * 2; arm++) {
+        const mirror = arm >= arms ? -1 : 1;
+        const armAng = ((arm % arms) / arms) * TAU + chaos * 0.6 * (p.noise(arm * 7.1, f.T * 0.1) - 0.5);
+        const ca = Math.cos(rotZoom + armAng), sa = Math.sin(rotZoom + armAng);
+        const P = (u, v) => {
+          const X = (u - GS.ex) * unit, Y = (v - GS.ey) * unit * mirror;
+          return [cx + ox + X * ca - Y * sa, cy + oy + X * sa + Y * ca];
+        };
+        for (let k = 0; k < GS.sq.length; k++) {
+          const q = GS.sq[k];
+          const size = q.s * unit;
+          if (size < 1.2) break;
+          if (size > md * 4) continue;
+          const depth = k + layer;
+          const hue = ((f.hue + depth * 0.045 + (arm % arms) * 0.09) % 1) * 360;
+          const alphaBase = (mirror < 0 ? 0.3 : 1) * (0.35 + 0.6 * coh) * Math.min(1, size / 30);
+          ctx.strokeStyle = tintRGB ? `rgba(${tintRGB},${(alphaBase * 0.5).toFixed(3)})` : `hsla(${hue.toFixed(0)},${(45 + 50 * coh).toFixed(0)}%,${(60 + 12 * coh).toFixed(0)}%,${alphaBase.toFixed(3)})`;
+          ctx.lineWidth = Math.max(0.7, Math.min(4.5, size * 0.009)) * (0.8 + 0.5 * f.b);
+          // The arc, as a polyline so it can wobble when scattered.
+          ctx.beginPath();
+          const n = 26;
+          for (let i = 0; i <= n; i++) {
+            const a = q.a0 + ((q.a1 - q.a0) * i) / n;
+            const wob = chaos * 0.12 * (p.noise(depth * 0.7 + i * 0.15, arm, f.T * 0.4) - 0.5);
+            const [px, py] = P(q.cx + Math.cos(a) * q.s * (1 + wob), q.cy + Math.sin(a) * q.s * (1 + wob));
+            i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+          }
+          ctx.stroke();
+          // The squares themselves, faint, only for the first arm.
+          if (arm === 0 && !tintRGB) {
+            ctx.strokeStyle = `hsla(${hue.toFixed(0)},50%,72%,${(alphaBase * 0.3).toFixed(3)})`;
+            ctx.lineWidth = 0.8;
+            const c1 = P(q.x, q.y), c2 = P(q.x + q.s, q.y), c3 = P(q.x + q.s, q.y + q.s), c4 = P(q.x, q.y + q.s);
+            ctx.beginPath(); ctx.moveTo(...c1); ctx.lineTo(...c2); ctx.lineTo(...c3); ctx.lineTo(...c4); ctx.closePath(); ctx.stroke();
+            // Fractal echo: a small golden spiral nested inside mid-sized squares.
+            if (coh > 0.4 && size > 60 && size < md * 0.9 && Q.blur) {
+              ctx.strokeStyle = `hsla(${((hue + 140) % 360).toFixed(0)},75%,75%,${((coh - 0.4) * 0.55).toFixed(3)})`;
+              ctx.beginPath();
+              for (let j = 0; j < 9; j++) {
+                const r = GS.sq[j];
+                const sc = q.s / PHI; // the nested spiral fills the square
+                for (let i = 0; i <= 10; i++) {
+                  const a = r.a0 + ((r.a1 - r.a0) * i) / 10;
+                  const u = q.x + (r.cx + Math.cos(a) * r.s) * sc * 0.98 + q.s * 0.01;
+                  const v = q.y + (r.cy + Math.sin(a) * r.s) * sc * 0.98 + q.s * 0.2;
+                  const [px, py] = P(u, v);
+                  (i || j) ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+                }
+              }
+              ctx.stroke();
+            }
+          }
         }
-        ctx.stroke();
       }
     }
-    // A soft glow at the heart of the flower, breathing.
-    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, md * (0.06 + 0.06 * f.b));
-    g.addColorStop(0, `hsla(${(base * 360).toFixed(0)},70%,80%,${(0.25 + 0.35 * coh).toFixed(3)})`);
+    // The eye: a glow where every spiral converges.
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, md * (0.05 + 0.05 * f.b));
+    g.addColorStop(0, `hsla(${((f.hue + layer * 0.045) % 1 * 360).toFixed(0)},80%,85%,${(0.3 + 0.4 * coh).toFixed(3)})`);
     g.addColorStop(1, 'hsla(0,0%,0%,0)');
     ctx.fillStyle = g;
-    ctx.fillRect(cx - md * 0.15, cy - md * 0.15, md * 0.3, md * 0.3);
+    ctx.fillRect(cx - md * 0.1, cy - md * 0.1, md * 0.2, md * 0.2);
   }
 
   return {
