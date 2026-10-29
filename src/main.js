@@ -53,8 +53,8 @@ const DEVICES = [
     desc: 'Hold space, or press and hold the screen, while you breathe in, and let go as you breathe out. Breathing evenly with the pacer builds coherence. Counts for streaks, not for rank.' },
   { id: 'ble', cls: BleHeartRate, title: 'Bluetooth heart-rate strap', short: 'Strap', tag: 'most accurate', good: true,
     desc: 'Polar H10, Garmin HRM, Wahoo TICKR or any strap that sends beat intervals. Chrome or Edge.' },
-  { id: 'emwave', cls: EmWaveHid, title: 'emWave 2 / emWave Pro (USB)', short: 'emWave', tag: 'decoding',
-    desc: 'Quit emWave Pro first. Connects read-only and records the raw USB data so the format can be decoded. Live coherence follows once it is.' },
+  { id: 'emwave', cls: EmWaveHid, title: 'emWave 2 (USB)', short: 'emWave', tag: 'read-only', good: true,
+    desc: 'Quit emWave Pro, plug in the emWave 2 and start a session on it. Breathfield reads its heartbeats and its own low / medium / high verdict, and never writes to the device.' },
   { id: 'camera', cls: CameraPpg, title: 'Fingertip on the camera', short: 'Camera', tag: 'phone',
     desc: 'Rest a fingertip lightly on the back camera with the light on, and sit still. Studies of camera pulse during slow breathing found it close to ECG.' },
   { id: 'demo', cls: DemoSensor, make: () => new DemoSensor({ breath: () => app.breathB }), title: 'Demo signal', short: 'Demo', tag: 'not saved to streaks',
@@ -76,6 +76,11 @@ async function connect(id) {
   app.score = null; app.zone = null; app.hr = null; app.beats = [];
   dev.addEventListener('beat', (e) => onBeat(dev, e.detail));
   dev.addEventListener('status', () => { if (app.device === dev) renderStatus(); });
+  dev.addEventListener('verdict', (e) => {
+    // The emWave's own low/medium/high and E, kept with the session to compare and calibrate.
+    const v = e.detail, s = app.session;
+    if (app.device === dev && s) s.emwave.push([+(v.t - s.t0).toFixed(1), v.zone, v.entrainment, v.level, v.achievement]);
+  });
   renderStatus();
   renderDevices();
   try {
@@ -140,6 +145,7 @@ function startSession() {
     scores: [],
     hrs: [],
     ibis: [],
+    emwave: [],
   };
   const b = $('sessionBtn');
   b.textContent = 'End session'; b.classList.add('rec');
@@ -164,7 +170,7 @@ async function endSession(auto = false) {
     pattern: s.pattern, patternId: s.patternId, scenes: [...s.scenes],
     d: s.d, thresholds: s.thresholds,
     timeIn: s.timeIn, avgScore: avg(s.scores.map((x) => x[1])), avgHr: avg(s.hrs),
-    scores: s.scores, ibis: s.ibis, endedBy: auto ? 'timer' : 'you',
+    scores: s.scores, ibis: s.ibis, ...(s.emwave.length ? { emwave: s.emwave } : {}), endedBy: auto ? 'timer' : 'you',
   };
   if (rec.avgScore != null) rec.avgScore = +rec.avgScore.toFixed(1);
   if (rec.avgHr != null) rec.avgHr = +rec.avgHr.toFixed(1);
@@ -240,7 +246,7 @@ function renderDevices() {
     const why = d.cls.support();
     const active = app.deviceId === d.id && app.device;
     const st = active ? `<div class="st" data-state="${app.device.state}">${esc(app.device.text || '')}</div>` : '';
-    const extra = d.id === 'emwave' && active ? `<button class="solo" data-capture>Save recording (${app.device.packets.length} packets)</button>` : '';
+    const extra = d.id === 'emwave' && active ? `<button class="solo" data-capture>Save raw recording (${app.device.packets.length} packets)</button>` : '';
     return `<div class="dev ${active ? 'active' : ''}">
       <div class="dev-head"><h4>${esc(d.title)}</h4><span class="tag ${d.good ? 'good' : ''}">${esc(d.tag)}</span></div>
       <p>${esc(d.desc)}</p>

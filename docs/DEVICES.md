@@ -47,17 +47,39 @@ Three recordings with a known difference between them make the format much easie
 the pulse wave should rise and fall about once a second, and the beat interval should swing
 slowly in the slow-breathing file.
 
-### Step 3: decode
+### Step 3: the protocol (decoded)
 
-Fill in `decodeReport()` in `src/devices/emwave-hid.js`. It returns either raw pulse samples
-(which go through the beat detector in `ppg.js`) or ready-made beat intervals.
+Decoded from three recordings (nothing on the sensor, sitting still, slow breathing). The
+emWave 2 streams on its own while a session runs on the handheld; no start command is needed.
+With no session running it only sends keep-alives.
 
-### If the sensor stays silent
+Every HID report starts with a type byte:
 
-Some devices only start streaming after the host sends a command. Then we need to see what
-emWave Pro sends. Capturing USB traffic on recent macOS is awkward, so the usual route is a
-Windows machine or virtual machine running emWave Pro with USBPcap and Wireshark. We would only
-ever replay the start-streaming command, never anything that touches stored data.
+```
+0x75 lo hi 00 …            keep-alive, 16-bit counter, about every 1.3 s
+0x66 lo hi len text…       `len` bytes of ASCII, 16-bit counter; text continues across reports
+```
+
+The text is a stream of messages in angle brackets, separated by carriage returns:
+
+| Message | Meaning |
+| --- | --- |
+| `<I 736 >` | One heartbeat: interval since the previous beat in ms. Resolution is about 7 ms. |
+| `<2 I=760 R=F H=79 >` | The intervals resampled at 2 Hz (two per second whatever your heart rate). `R=T` marks an artifact, `H` is 60000 / I. |
+| `<1 L=1 T=295 S=2 A=43 E=222 >` | Every 5 s. `L` challenge level, `T` session seconds, `S` zone (0 low, 1 medium, 2 high), `A` accumulated achievement score (−1, +1 or +2 per 5 s), `E` see below. |
+
+`E` rises steeply with coherence (9–90 while sitting still, up to 3347 while breathing slowly).
+It tracks HeartMath's "entrainment parameter" from their patent, (peak power ÷ power below the
+peak) × (peak power ÷ power above it), times 100: computed on the emWave's own 2 Hz series it
+went 1078 → 4408 while `E` went 1156 → 3347. Longer recordings will pin this down.
+
+At challenge level 1, `S` switched to medium somewhere between `E` 47 and 65, and to high
+between 90 and 166.
+
+`tools/emwave_decode.py` turns a recording into a beats file for Kubios and a CSV of the
+emWave's verdicts. In the app, the emWave adapter emits the real beats into Breathfield's
+coherence engine and keeps the emWave's own `S` and `E` with each session, so the two can be
+compared and calibrated over time.
 
 ### Sessions stored on the emWave 2 handheld
 
