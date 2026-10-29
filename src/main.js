@@ -1,11 +1,11 @@
-import { PATTERNS, breathAt, perMinute, setCustom, CUSTOM } from './engine/breath.js';
+import { PATTERNS, breathAt, perMinute, cycleSec, setCustom, CUSTOM } from './engine/breath.js';
 import { CoherenceEngine, STEP_SEC, MIN_SEC } from './engine/coherence.js';
 import { RANKS, thresholdsFor, zoneOf, visualLevel, initialLevelState, activeD, rankOf, adaptAfterSession, GREY, HOLD_SESSIONS } from './engine/levels.js';
 import { evaluate, gained } from './engine/achievements.js';
 import { byDay, runs, currentStreak, bestStreak, totals, dayKey, addDays, keyToDate, MIN_SESSION_SEC } from './engine/progress.js';
 import * as store from './store.js';
 import { Drone } from './audio.js';
-import { SCENES, createScenes, drawGuide } from './visuals/scenes.js';
+import { SCENES, createScenes, drawGuide, drawWaveGuide } from './visuals/scenes.js';
 import { badgeGlyph } from './visuals/badges.js';
 import { PracticeKeys, DemoSensor } from './devices/simulated.js';
 import { BleHeartRate } from './devices/ble-hr.js';
@@ -30,7 +30,7 @@ const fmtMin = (m) => (m >= 90 ? `${(m / 60).toFixed(1)} h` : `${Math.round(m)} 
 const now = () => performance.now() / 1000;
 const motion = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.45 : 1;
 
-const DEFAULT_SETTINGS = { scene: 0, pattern: 0, guide: true, volume: 0.6, sessionMin: 10, rollover: 3, device: 'practice', colours: 'own',
+const DEFAULT_SETTINGS = { scene: 0, pattern: 0, guideMode: 'full', guideStyle: 'ring', volume: 0.6, sessionMin: 10, rollover: 3, device: 'practice', colours: 'own',
   coherenceTint: 'soft', palette: 'classic', custom: { inS: 5, holdIn: 0, outS: 5, holdOut: 0 } };
 
 const app = {
@@ -356,8 +356,9 @@ function renderTint(level) {
   }
   tc.style.backgroundColor = c;
   tc.style.opacity = (0.5 * k).toFixed(3);
-  tg.style.background = `radial-gradient(circle at 50% 50%, ${c} 0%, transparent 70%)`;
-  tg.style.opacity = (Math.max(0, v - 0.45) * 0.9 * k).toFixed(3);
+  // The glow is the brightness cue for high coherence: kept close to the centre and gentle.
+  tg.style.background = `radial-gradient(circle at 50% 50%, ${c} 0%, transparent 52%)`;
+  tg.style.opacity = (Math.max(0, v - 0.55) * 0.55 * k).toFixed(3);
   if (cv) cv.style.filter = `brightness(${(1 - Math.max(0, 0.5 - v) * 1.1 * k).toFixed(3)})`;
 }
 
@@ -607,12 +608,27 @@ $('sensorBtn').addEventListener('click', () => openPanel('sensorPanel'));
 $('journalBtn').addEventListener('click', () => openPanel('journalPanel', 'progress'));
 $('settingsBtn').addEventListener('click', () => openPanel('journalPanel', 'settings'));
 $('sessionBtn').addEventListener('click', () => (app.session ? endSession() : startSession()));
+// The breathing guide: words and seconds → seconds only → shape only → off.
+const GUIDE_MODES = ['full', 'numbers', 'none', 'off'];
+const GUIDE_LABELS = { full: 'Guide', numbers: 'Guide: seconds', none: 'Guide: quiet', off: 'Guide: off' };
+function applyGuide() {
+  const { guideMode: m, guideStyle: s } = app.settings;
+  const b = $('guide');
+  b.textContent = GUIDE_LABELS[m];
+  b.setAttribute('aria-pressed', String(m !== 'off'));
+  const ui = $('ui');
+  ui.classList.toggle('noguide', m === 'off' || m === 'none');
+  ui.classList.toggle('guide-numbers', m === 'numbers');
+  ui.classList.toggle('guide-wave', s === 'wave');
+  if ($('guideMode')) { $('guideMode').value = m; $('guideStyle').value = s; }
+}
 $('guide').addEventListener('click', () => {
-  app.settings.guide = !app.settings.guide;
-  $('guide').setAttribute('aria-pressed', String(app.settings.guide));
-  $('ui').classList.toggle('noguide', !app.settings.guide);
-  saveSettings();
+  const m = app.settings.guideMode;
+  app.settings.guideMode = GUIDE_MODES[(GUIDE_MODES.indexOf(m) + 1) % GUIDE_MODES.length];
+  applyGuide(); saveSettings();
 });
+$('guideMode').addEventListener('change', (e) => { app.settings.guideMode = e.target.value; applyGuide(); saveSettings(); });
+$('guideStyle').addEventListener('change', (e) => { app.settings.guideStyle = e.target.value; applyGuide(); saveSettings(); });
 const drone = new Drone();
 $('sound').addEventListener('click', () => {
   const on = $('sound').getAttribute('aria-pressed') !== 'true';
@@ -773,7 +789,13 @@ new p5((p) => {
     hue += sdt * (0.006 + 0.02 * (1 - app.visual));
     travel += sdt * (0.2 + 0.55 * br.b);
     scenes.draw({ scene: app.settings.scene, b: br.b, coh: app.visual, T, dt: sdt, hue, travel, hr: app.hrSmooth, hrv: app.hrv });
-    if (app.settings.guide) drawGuide(p, br, app.deviceId === 'practice' && app.holding);
+    if (app.settings.guideMode !== 'off') {
+      const active = app.deviceId === 'practice' && app.holding;
+      if (app.settings.guideStyle === 'wave') {
+        const pat = app.settings.pattern;
+        drawWaveGuide(p, (tt) => breathAt(tt, pat).b, t - app.pacer0, cycleSec(pat), active);
+      } else drawGuide(p, br, active);
+    }
     renderHud(br);
     renderTint(app.visual);
     drone.update(br.b, app.score == null ? null : app.visual);
@@ -806,8 +828,9 @@ window.breathfield = { app, startSession, endSession, connect };
   applyCustom();
   setScene(app.settings.scene);
   setPattern(app.settings.pattern);
-  $('guide').setAttribute('aria-pressed', String(app.settings.guide));
-  $('ui').classList.toggle('noguide', !app.settings.guide);
+  if (app.settings.guide === false && !('guideMode' in (await store.get('settings', {})))) app.settings.guideMode = 'off';
+  delete app.settings.guide;
+  applyGuide();
   // Sensors that need a browser dialog cannot reconnect on their own, so we
   // start with practice (or the demo) and let you pick the sensor again.
   connect(['practice', 'demo'].includes(app.settings.device) ? app.settings.device : 'practice');

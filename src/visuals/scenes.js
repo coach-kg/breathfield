@@ -284,6 +284,49 @@ export function createScenes(p) {
   };
 }
 
+/**
+ * The pacer as a wave across the screen. The breath ahead of you scrolls in
+ * from the right, a ball rides the wave at the centre: up while you breathe
+ * in, along the top while you hold, down while you breathe out. Both ends
+ * fade into the dark.
+ * bAt(t): breath depth 0..1 at pacer time t; now: current pacer time;
+ * cycle: seconds per breath.
+ */
+export function drawWaveGuide(p, bAt, now, cycle, active) {
+  const ctx = p.drawingContext, W = p.width, H = p.height, md = Math.min(W, H);
+  const cy = H / 2, amp = md * 0.13, span = cycle * 2.2;
+  const yAt = (t) => cy + amp * (1 - 2 * bAt(t));
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.lineCap = 'round';
+  const seg = 90;
+  for (let k = 0; k < seg; k++) {
+    const x0 = (k / seg) * W, x1 = ((k + 1) / seg) * W;
+    const mid = (x0 + x1) / 2 / W - 0.5;
+    const e = Math.max(0, 1 - Math.abs(mid) * 2);
+    const fade = e * e * (3 - 2 * e);
+    if (fade <= 0.01) continue;
+    ctx.strokeStyle = `rgba(239,234,255,${(0.42 * fade).toFixed(3)})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let j = 0; j <= 6; j++) {
+      const x = x0 + ((x1 - x0) * j) / 6;
+      const y = yAt(now + ((x - W / 2) / W) * span);
+      j ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    }
+    ctx.stroke();
+  }
+  const by = yAt(now);
+  const g = ctx.createRadialGradient(W / 2, by, 0, W / 2, by, 22);
+  g.addColorStop(0, 'rgba(239,234,255,0.55)');
+  g.addColorStop(1, 'rgba(239,234,255,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(W / 2, by, 22, 0, TAU); ctx.fill();
+  ctx.fillStyle = 'rgba(239,234,255,0.95)';
+  ctx.beginPath(); ctx.arc(W / 2, by, active ? 7 : 5.5, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+
 /** The pacer ring drawn over any scene. */
 export function drawGuide(p, br, active) {
   const ctx = p.drawingContext, md = Math.min(p.width, p.height), cx = p.width / 2, cy = p.height / 2;

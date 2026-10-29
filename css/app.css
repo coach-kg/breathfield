@@ -74,6 +74,9 @@ output { color: var(--ink); }
 #cue { font-family: var(--f-display); font-weight: 200; font-size: clamp(28px, 6vmin, 56px); letter-spacing: 0.32em; text-transform: lowercase; padding-left: 0.32em; }
 #cueSec { margin-top: 8px; color: var(--mute); font-size: 11px; letter-spacing: 0.2em; font-variant-numeric: tabular-nums; }
 .ui.noguide .cue { display: none; }
+.ui.guide-numbers #cue { display: none; }
+.ui.guide-numbers #cueSec { font-family: var(--f-display); font-weight: 200; font-size: clamp(22px, 4.5vmin, 40px); color: var(--ink); margin-top: 0; }
+.ui.guide-wave .cue { top: calc(50% - 13vmin - 64px); }
 
 .dock {
   position: absolute; left: 0; right: 0; bottom: 0;
