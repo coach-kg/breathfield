@@ -52,6 +52,7 @@ const app = {
   hist: [],
   beats: [],
   session: null,
+  flashes: [],
   emwave: null, // latest verdict from a connected emWave {zone, entrainment, level, achievement, t}
 };
 
@@ -68,7 +69,7 @@ const DEVICES = [
     desc: 'Polar H10, Garmin HRM, Wahoo TICKR or any strap that sends beat intervals. Chrome or Edge.' },
   { id: 'emwave', cls: EmWaveHid, title: 'emWave 2 (USB)', short: 'emWave', tag: 'read-only', good: true,
     desc: 'Quit emWave Pro, plug in the emWave 2 and start a session on it. Breathfield reads its heartbeats and its own low / medium / high verdict, and never writes to the device.' },
-  { id: 'camera', cls: CameraPpg, title: 'Fingertip on the camera', short: 'Camera', tag: 'phone',
+  { id: 'camera', cls: CameraPpg, make: () => new CameraPpg({ deviceId: app.settings.cameraId }), title: 'Fingertip on the camera', short: 'Camera', tag: 'phone',
     desc: 'Rest a fingertip lightly on the back camera with the light on, and sit still. Studies of camera pulse during slow breathing found it close to ECG.' },
   { id: 'demo', cls: DemoSensor, make: () => new DemoSensor({ breath: () => app.breathB }), title: 'Demo signal', short: 'Demo', tag: 'not saved to streaks',
     desc: 'A pretend heart that settles into the pacer over a few minutes. For trying scenes and sounds.' },
@@ -125,6 +126,24 @@ function onBeat(dev, { t, ibi }) {
   app.beats.push({ t, ibi, ok });
   while (app.beats.length && app.beats[0].t < t - 70) app.beats.shift();
   if (app.session && ok) app.session.ibis.push([+(t - app.session.t0).toFixed(3), Math.round(ibi)]);
+  // The beat light: shown at the beat's own time, delayed by the source's batching lag
+  // so the blinks keep your real rhythm instead of bunching up when a batch arrives.
+  app.flashes.push({ at: t + (dev.lag || 0), ok });
+  if (app.flashes.length > 20) app.flashes.shift();
+}
+
+let beatGlow = 0, beatOk = true;
+function renderBeatLight() {
+  const tNow = now();
+  while (app.flashes.length && app.flashes[0].at <= tNow) {
+    const f = app.flashes.shift();
+    if (tNow - f.at < 0.5) { beatGlow = 1; beatOk = f.ok; }
+  }
+  beatGlow *= 0.9;
+  const el = $('beatDot');
+  el.style.opacity = (0.15 + 0.85 * beatGlow).toFixed(3);
+  el.style.transform = `scale(${(0.8 + 0.5 * beatGlow).toFixed(3)})`;
+  el.dataset.ok = beatOk ? '1' : '0';
 }
 
 function onScore(r) {
@@ -293,7 +312,10 @@ function renderDevices() {
     const why = d.cls.support();
     const active = app.deviceId === d.id && app.device;
     const st = active ? `<div class="st" data-state="${app.device.state}">${esc(app.device.text || '')}</div>` : '';
-    const extra = d.id === 'emwave' && active ? `<button class="solo" data-capture>Save raw recording (${app.device.packets.length} packets)</button>` : '';
+    let extra = d.id === 'emwave' && active ? `<button class="solo" data-capture>Save raw recording (${app.device.packets.length} packets)</button>` : '';
+    if (d.id === 'camera' && active && app.device.cameras && app.device.cameras.length > 1) {
+      extra += `<label class="field camsel" for="cameraSel"><span>Camera${app.device.lens ? ` · now ${esc(app.device.lens)}` : ''}</span><select id="cameraSel">${app.device.cameras.map((c) => `<option value="${esc(c.id)}" ${c.id === app.device.current ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}</select></label>`;
+    }
     return `<div class="dev ${active ? 'active' : ''}">
       <div class="dev-head"><h4>${esc(d.title)}</h4><span class="tag ${d.good ? 'good' : ''}">${esc(d.tag)}</span></div>
       <p>${esc(d.desc)}</p>
@@ -302,8 +324,12 @@ function renderDevices() {
       <div class="btns">
         ${active ? `<button class="solo" data-disconnect="${d.id}">Disconnect</button>` : `<button class="solo primary" data-connect="${d.id}" ${why ? 'disabled' : ''}>Use this</button>`}
         ${extra}
-      </div></div>`;
+      </div>${d.id === 'camera' && active ? '<div class="campreview-slot"></div>' : ''}</div>`;
   }).join('');
+  const slot = list.querySelector('.campreview-slot');
+  if (slot && app.device && app.device.video) slot.appendChild(app.device.video);
+  const sel = $('cameraSel');
+  if (sel) sel.addEventListener('change', (e) => { app.settings.cameraId = e.target.value; saveSettings(); connect('camera'); });
 }
 
 $('deviceList').addEventListener('click', async (e) => {
@@ -827,6 +853,7 @@ new p5((p) => {
       } else drawGuide(p, br, active);
     }
     renderHud(br);
+    renderBeatLight();
     renderTint(app.visual);
     drone.update(br.b, app.score == null ? null : app.visual);
     if (app.session && app.session.lengthMin && t - app.session.t0 >= app.session.lengthMin * 60) endSession(true);
