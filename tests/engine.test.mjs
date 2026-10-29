@@ -157,3 +157,21 @@ test('PPG beat detector finds beats in a synthetic pulse wave', () => {
   const mean = ibis.reduce((a, b) => a + b, 0) / ibis.length;
   assert.ok(Math.abs(mean - 60000 / hr) < 25, `mean ibi ${mean}`);
 });
+
+test('decodes real emWave 2 packets into beats, 2 Hz samples and status', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { EmWaveParser } = await import('../src/devices/emwave-hid.js');
+  const lines = readFileSync(new URL('./fixtures/emwave2-slow-breathing.jsonl', import.meta.url), 'utf8').trim().split('\n').slice(1);
+  const p = new EmWaveParser();
+  const msgs = [];
+  for (const l of lines) msgs.push(...p.push(Uint8Array.from(JSON.parse(l).hex.split(' '), (h) => parseInt(h, 16))));
+  const beats = msgs.filter((m) => m.type === 'beat');
+  const samples = msgs.filter((m) => m.type === 'sample');
+  const status = msgs.filter((m) => m.type === 'status');
+  assert.equal(p.gaps, 0);
+  assert.ok(beats.length >= 5, `beats ${beats.length}`);
+  assert.ok(beats.every((b) => b.ibi > 300 && b.ibi < 2000));
+  assert.ok(samples.every((s) => Math.abs(s.hr - 60000 / s.ibi) < 1.5), 'H matches 60000 / I');
+  assert.deepEqual(status[0], { type: 'status', level: 1, time: 295, zone: 2, achievement: 43, entrainment: 222 });
+  assert.equal(msgs.filter((m) => m.type === 'unknown').length, 0);
+});

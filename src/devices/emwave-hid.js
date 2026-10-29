@@ -1,33 +1,74 @@
 // HeartMath emWave 2 / emWave Pro USB sensor (vendor ID 0x0E30) over WebHID.
 //
-// Status: the USB data format is not decoded yet. This adapter connects,
-// listens without sending anything to the device, and records every packet
-// so we can work out the format. Once the decoder below knows the layout it
-// emits beats (and the raw pulse wave, if the device sends one) like any
-// other sensor.
+// Reading only. Nothing is ever written to the device, so it cannot change
+// settings or erase the sessions stored on an emWave 2. Quit emWave Pro
+// first: only one program can hold the sensor at a time.
 //
-// Reading only. Nothing is ever written to the device, so it cannot erase
-// the sessions stored on an emWave 2.
+// The protocol (decoded from recordings, see docs/DEVICES.md):
 //
-// If Chrome's device picker shows nothing, the sensor is probably not a HID
-// device. tools/emwave_probe.py tells you for sure. Quit emWave Pro first:
-// only one program can hold the sensor at a time.
+//   0x75 lo hi 00…          keep-alive with a 16-bit counter, about every 1.3 s
+//   0x66 lo hi len text…    `len` bytes of ASCII text, a 16-bit counter in lo/hi
+//
+// While a session runs on the emWave, the text is a stream of messages:
+//
+//   <I 736 >                         one heartbeat: interval since the last beat, ms
+//   <2 I=760 R=F H=79 >              the beat intervals resampled at 2 Hz;
+//                                    R=T marks an artifact, H is heart rate
+//   <1 L=1 T=295 S=2 A=43 E=222 >    every 5 s: challenge level, session seconds,
+//                                    zone (0 low, 1 medium, 2 high),
+//                                    accumulated achievement score, and E, which
+//                                    tracks HeartMath's "entrainment parameter"
+//                                    (peak/below × peak/above) times 100
 
 import { Device } from './device.js';
-import { BeatDetector } from './ppg.js';
 
 export const HEARTMATH_VENDOR_ID = 0x0e30;
 // Seen on an emWave 2 (firmware 0.81, made by Quantum Intech Inc.):
-// product 0x0008, one vendor-defined HID collection (usage page 0xFF00, usage 0xFF).
+// product 0x0008, vendor-defined HID (usage page 0xFF00).
 export const EMWAVE2_PRODUCT_ID = 0x0008;
 const hex = (u8) => Array.from(u8, (b) => b.toString(16).padStart(2, '0')).join(' ');
 
-/**
- * Decoder, to be filled in from captured packets.
- * Return {beats: [ibiMs…], pulse: [value…]} or null when unknown.
- */
-export function decodeReport(/* reportId, bytes */) {
-  return null;
+/** Parse the text inside one <…> message. */
+export function parseMessage(m) {
+  const text = m.trim();
+  const beat = /^I\s+(\d+)$/.exec(text);
+  if (beat) return { type: 'beat', ibi: +beat[1] };
+  const parts = text.split(/\s+/);
+  const kv = {};
+  for (const p of parts.slice(1)) {
+    const i = p.indexOf('=');
+    if (i > 0) kv[p.slice(0, i)] = p.slice(i + 1);
+  }
+  if (parts[0] === '2' && kv.I) return { type: 'sample', ibi: +kv.I, artifact: kv.R === 'T', hr: kv.H ? +kv.H : null };
+  if (parts[0] === '1' && kv.S != null) {
+    return { type: 'status', level: +kv.L, time: +kv.T, zone: +kv.S, achievement: +kv.A, entrainment: kv.E != null ? +kv.E : null };
+  }
+  return { type: 'unknown', text };
+}
+
+/** Turns HID reports into messages. Feed it the full report, type byte first. */
+export class EmWaveParser {
+  constructor() { this.reset(); }
+  reset() { this.buf = ''; this.lastSeq = null; this.gaps = 0; }
+
+  push(bytes) {
+    if (!bytes.length || bytes[0] !== 0x66) return [];
+    const seq = bytes[1] | (bytes[2] << 8);
+    if (this.lastSeq != null && seq !== ((this.lastSeq + 1) & 0xffff)) { this.gaps++; this.buf = ''; }
+    this.lastSeq = seq;
+    const len = Math.min(bytes[3], bytes.length - 4);
+    for (let i = 0; i < len; i++) this.buf += String.fromCharCode(bytes[4 + i]);
+    const out = [];
+    let k;
+    while ((k = this.buf.indexOf('>')) >= 0) {
+      const raw = this.buf.slice(0, k);
+      this.buf = this.buf.slice(k + 1);
+      const s = raw.lastIndexOf('<');
+      if (s >= 0) out.push(parseMessage(raw.slice(s + 1)));
+    }
+    if (this.buf.length > 4000) this.buf = '';
+    return out;
+  }
 }
 
 export class EmWaveHid extends Device {
@@ -35,7 +76,8 @@ export class EmWaveHid extends Device {
     super('emwave', 'emWave (USB)');
     this.kind = 'sensor';
     this.packets = [];
-    this.detector = new BeatDetector();
+    this.parser = new EmWaveParser();
+    this.lastStatus = null;
   }
 
   static support() {
@@ -52,6 +94,9 @@ export class EmWaveHid extends Device {
     this.dev = dev;
     this.label = dev.productName || this.label;
     this.packets = [];
+    this.parser.reset();
+    this.lastBeatT = null;
+    this.lastStatus = null;
     this.started = performance.now() / 1000;
     this._onReport = (e) => this.onReport(e);
     dev.addEventListener('inputreport', this._onReport);
@@ -59,27 +104,45 @@ export class EmWaveHid extends Device {
     clearTimeout(this.silentTimer);
     this.silentTimer = setTimeout(() => {
       if (!this.packets.length) {
-        this.status(`${this.label} is connected but has sent nothing yet. It may need a start command that only emWave Pro knows. See docs/DEVICES.md.`, 'warn');
+        this.status(`${this.label} is connected but silent. Unplug and replug it, and make sure emWave Pro is closed.`, 'warn');
       }
     }, 6000);
   }
 
   onReport(e) {
     const t = performance.now() / 1000;
-    const bytes = new Uint8Array(e.data.buffer, e.data.byteOffset, e.data.byteLength);
-    if (this.packets.length < 200000) this.packets.push({ t: +(t - this.started).toFixed(4), id: e.reportId, hex: hex(bytes) });
-    const dec = decodeReport(e.reportId, bytes);
-    if (!dec) {
-      if (this.packets.length % 50 === 1) this.status(`Recording raw data from ${this.label}: ${this.packets.length} packets. Not decoded yet.`, 'warn');
+    const data = new Uint8Array(e.data.buffer, e.data.byteOffset, e.data.byteLength);
+    // Depending on the platform the type byte arrives as the report ID or as the first data byte.
+    const bytes = e.reportId ? Uint8Array.from([e.reportId, ...data]) : data;
+    if (this.packets.length < 200000) this.packets.push({ t: +(t - this.started).toFixed(4), hex: hex(bytes) });
+    if (bytes[0] === 0x75) {
+      if (!this.hadText && this.packets.length > 3) {
+        this.status(`${this.label} is connected. Start a session on the emWave and put your finger or the ear clip on the sensor.`, 'warn');
+      }
       return;
     }
-    for (const v of dec.pulse || []) {
-      this.emit('pulse', { t, v });
-      const beat = this.detector.push(t, v);
-      if (beat) this.emit('beat', beat);
+    for (const m of this.parser.push(bytes)) this.handle(m, t);
+  }
+
+  handle(m, now) {
+    if (m.type === 'beat') {
+      this.hadText = true;
+      // Beats arrive in batches about once a second; space them back from now.
+      let t = this.lastBeatT == null || now - this.lastBeatT > 3 ? now - m.ibi / 1000 : this.lastBeatT;
+      t += m.ibi / 1000;
+      if (t > now) t = now;
+      this.lastBeatT = t;
+      this.emit('beat', { t, ibi: m.ibi });
+      if (this.state !== 'on') this.status(`Connected to ${this.label}`, 'on');
+    } else if (m.type === 'status') {
+      this.hadText = true;
+      this.lastStatus = m;
+      this.emit('verdict', { ...m, t: now });
+      const zone = ['low', 'medium', 'high'][m.zone] || '?';
+      this.status(`${this.label}: its own verdict is ${zone} (challenge level ${m.level}, E ${m.entrainment ?? '–'}).`, 'on');
+    } else if (m.type === 'sample') {
+      this.emit('sample', { ...m, t: now });
     }
-    for (const ibi of dec.beats || []) this.emit('beat', { t, ibi });
-    if (this.state !== 'on') this.status(`Connected to ${this.label}`, 'on');
   }
 
   /** Everything we know about the device plus the packets, for decoding. */
@@ -105,6 +168,7 @@ export class EmWaveHid extends Device {
 
   async disconnect() {
     clearTimeout(this.silentTimer);
+    this.hadText = false;
     if (this.dev) {
       this.dev.removeEventListener('inputreport', this._onReport);
       try { await this.dev.close(); } catch (e) { /* already closed */ }

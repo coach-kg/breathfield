@@ -27,11 +27,11 @@ No build step and no dependencies: it is plain HTML and JavaScript, plus p5.js f
 | Practice without a sensor (hold space while breathing in) | every browser | trains the habit, no real heart data | ready |
 | Bluetooth chest strap with beat intervals (Polar H10, Garmin HRM, Wahoo TICKR …) | Chrome or Edge on Mac, Windows, Android, ChromeOS | best | ready |
 | Fingertip on the phone camera | phones; light control on Android only | good when you sit still | ready, experimental |
-| emWave 2 / emWave Pro USB sensor | Chrome or Edge on a computer | as good as emWave | connects and records raw data; decoding in progress |
+| emWave 2 USB (start a session on the handheld) | Chrome or Edge on a computer | as good as emWave | live beats plus the emWave's own low/medium/high |
 | Demo signal | everywhere | pretend | for trying things out |
 
 Safari does not support Bluetooth or USB devices in web pages, so use Chrome or Edge for those.
-See [docs/DEVICES.md](docs/DEVICES.md) for the emWave decoding plan.
+How the emWave's USB data is decoded: [docs/DEVICES.md](docs/DEVICES.md).
 
 ## Keys
 
