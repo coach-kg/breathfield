@@ -47,6 +47,11 @@ that Breathfield keeps updated after every session. Nothing is uploaded anywhere
 
 How coherence, the adaptive ranks and the badges work: [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md).
 
+## Coming maybe: minigames
+
+Tetris where a calm heart slows time, a glider riding the breathing wave, a lantern platformer
+where coherence lights the way. Sketches and ground rules: [docs/GAMES.md](docs/GAMES.md).
+
 ## Photosensitivity
 
 The scenes do not strobe. Brightness swells with the breath, about once every 10 seconds,
