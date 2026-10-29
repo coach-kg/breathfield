@@ -13,9 +13,12 @@ import { Device } from './device.js';
 import { BeatDetector } from './ppg.js';
 
 export class CameraPpg extends Device {
-  constructor() {
+  /** deviceId: a specific camera; otherwise the browser's default back camera. */
+  constructor({ deviceId } = {}) {
     super('camera', 'Fingertip on camera');
     this.kind = 'sensor';
+    this.deviceId = deviceId || null;
+    this.lag = 0.05; // beats are found live, so the beat light can follow almost at once
   }
 
   static support() {
@@ -25,19 +28,31 @@ export class CameraPpg extends Device {
 
   async connect() {
     this.status('Allow camera access…');
-    this.stream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 320 }, height: { ideal: 240 }, frameRate: { ideal: 30 } },
-    });
+    const video = { width: { ideal: 320 }, height: { ideal: 240 }, frameRate: { ideal: 30 } };
+    if (this.deviceId) video.deviceId = { exact: this.deviceId };
+    else video.facingMode = { ideal: 'environment' };
+    this.stream = await navigator.mediaDevices.getUserMedia({ audio: false, video });
     this.track = this.stream.getVideoTracks()[0];
     this.torch = false;
+    this.torchSupported = false;
     try {
       const caps = this.track.getCapabilities ? this.track.getCapabilities() : {};
+      this.torchSupported = !!caps.torch;
       if (caps.torch) { await this.track.applyConstraints({ advanced: [{ torch: true }] }); this.torch = true; }
     } catch (e) { /* no light control */ }
+    // Which lens is this, and which others are there? (labels are readable once access is granted)
+    try {
+      const all = await navigator.mediaDevices.enumerateDevices();
+      this.cameras = all.filter((d) => d.kind === 'videoinput').map((d, i) => ({ id: d.deviceId, label: d.label || `Camera ${i + 1}` }));
+      this.current = (this.track.getSettings && this.track.getSettings().deviceId) || this.deviceId;
+      const cur = this.cameras.find((c) => c.id === this.current);
+      this.lens = cur ? cur.label : this.track.label;
+    } catch (e) { this.cameras = []; }
 
     const v = document.createElement('video');
     v.playsInline = true; v.muted = true; v.srcObject = this.stream;
+    v.className = 'campreview';
+    v.setAttribute('aria-label', 'Camera preview');
     await v.play();
     this.video = v;
     this.canvas = document.createElement('canvas');
@@ -46,7 +61,11 @@ export class CameraPpg extends Device {
     this.detector = new BeatDetector({ invert: true });
     this.finger = false;
     this.running = true;
-    this.status(this.torch ? 'Cover the camera and the light with your fingertip.' : 'Cover the camera with your fingertip and face a bright light.', 'busy');
+    this.status(this.torch
+      ? 'Light on. Rest your fingertip gently over the lens and the light.'
+      : this.torchSupported
+        ? 'Could not switch the light on. Cover the lens with your fingertip and hold the phone toward a bright lamp.'
+        : 'This browser cannot switch the phone light on (Firefox cannot; Chrome and Samsung Internet can). Cover the lens and hold the phone toward a bright lamp.', this.torch ? 'busy' : 'warn');
     this.loop();
   }
 
@@ -70,7 +89,7 @@ export class CameraPpg extends Device {
       const finger = r > 60 && r > g * 1.8;
       if (finger !== this.finger) {
         this.finger = finger;
-        if (finger) this.status('Finger detected. Hold still…', 'on');
+        if (finger) this.status(`Finger detected${this.torch ? '' : ' (no light)'}. Hold still and relax your hand…`, 'on');
         else { this.status('Place your fingertip over the camera.', 'warn'); this.detector.reset(); }
       }
       if (finger) {

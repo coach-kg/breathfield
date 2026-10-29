@@ -77,6 +77,7 @@ export class EmWaveHid extends Device {
     this.kind = 'sensor';
     this.packets = [];
     this.parser = new EmWaveParser();
+    this.lag = 1.4; // beats arrive in batches with each text packet
     this.lastStatus = null;
   }
 

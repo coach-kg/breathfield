@@ -23,6 +23,7 @@ export class BleHeartRate extends Device {
   constructor() {
     super('ble', 'Bluetooth heart-rate strap');
     this.kind = 'sensor';
+    this.lag = 1.2; // intervals arrive in batches about once a second
   }
 
   static support() {
