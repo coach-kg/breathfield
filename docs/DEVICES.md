@@ -127,3 +127,18 @@ A 2023 study of camera pulse during slow-paced breathing found HRV values very c
 - Android Chrome: back camera with the flashlight on.
 - iPhone Safari: no flashlight control in web pages; hold the finger over the lens facing a bright lamp or window.
 - Laptop webcams: unreliable.
+
+## Comparing two sources at the same time
+
+To check how well the phone camera (or any source) reads your heart, record it alongside a
+trusted one:
+
+1. On the Mac, connect the emWave and start a Breathfield session.
+2. Within a few seconds, start a session on the phone with the camera.
+3. Breathe normally for 5 minutes or more, end both sessions, export both journals.
+4. `python3 tools/compare_sessions.py mac-journal.json phone-journal.json`
+
+It aligns the two by clock and then by the heart-rate wave itself, and reports the share of
+beats matched within 150 ms, the beat-interval error, both heart rates and how often the two
+coherence colours agree. Camera sessions also store the raw pulse signal (15 per second), so
+poor stretches can be inspected afterwards.
