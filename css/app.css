@@ -119,9 +119,27 @@ select option { background: var(--void); color: var(--ink); }
 .grp.icons .ico[aria-pressed="true"] { background: var(--ink); color: var(--void); }
 .sel .ico { border-left: 1px solid var(--line); height: 100%; }
 .sel > label { display: contents; }
-.sdot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--mute); margin-right: 8px; vertical-align: 1px; }
-.sdot[data-state="on"] { background: var(--high); }
-.sdot[data-state="warn"] { background: var(--low); }
+.sheart { display: inline-block; vertical-align: -3px; margin-right: 8px; fill: var(--mute); transition: fill 0.6s; }
+.sheart[data-state="on"] { fill: var(--accent); }
+.sheart[data-state="warn"] { fill: var(--low); }
+.msg .sheart { fill: var(--accent); margin: 0 2px; }
+.ui.screenlit .top { top: calc(36vh + 12px); }
+.tour { position: fixed; inset: 0; z-index: 45; display: grid; place-items: center; background: rgba(6, 5, 10, 0.72);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 16px; }
+.tcard { width: min(520px, 100%); }
+.tstep { display: grid; gap: 14px; }
+.tart { width: 100%; height: auto; }
+.tfoot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tdots { display: flex; gap: 6px; }
+.tdots i { width: 6px; height: 6px; border-radius: 50%; background: var(--line); }
+.tdots i.on { background: var(--accent); }
+.tsources { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.tsrc { display: grid; gap: 4px; text-align: left; text-transform: none; letter-spacing: 0; border: 1px solid var(--line); padding: 12px; }
+.tsrc b { font-family: var(--f-display); font-weight: 300; font-size: 13px; }
+.tsrc span { color: var(--mute); font-size: 10.5px; line-height: 1.45; }
+.tsrc .ti { font-size: 18px; color: var(--accent); }
+.tsrc.picked { border-color: var(--accent); }
+@media (max-width: 420px) { .tsources { grid-template-columns: 1fr; } }
 #stage.orbit canvas { cursor: grab; }
 #stage.orbit.grabbing canvas { cursor: grabbing; }
 .hint { flex: 1 1 100%; margin: 0; color: var(--mute); font-size: 10.5px; line-height: 1.6; max-width: 80ch; }

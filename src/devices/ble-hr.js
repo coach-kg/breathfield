@@ -53,10 +53,16 @@ export class BleHeartRate extends Device {
     const m = parseHeartRateMeasurement(view);
     const now = performance.now() / 1000;
     if (!m.rr.length) {
-      this.status(`${this.label}: heart rate ${m.hr} bpm, but no beat intervals. This sensor cannot measure coherence.`, 'warn');
-      this.emit('hr', { hr: m.hr });
+      // Watches and armbands often share heart rate only. The slow rise and fall of
+      // heart rate with the breath still shows, so use it as an approximate series.
+      if (m.hr > 25) {
+        if (!this.approx) this.status(`${this.label}: heart rate only, no beat-to-beat timing. Coherence is approximate with this source.`, 'warn');
+        this.approx = true;
+        this.emit('beat', { t: now, ibi: 60000 / m.hr, approx: true });
+      }
       return;
     }
+    this.approx = false;
     // RR values arrive in a batch about once a second; place beats back from now.
     let t = this.lastBeatT == null ? now - m.rr.reduce((a, b) => a + b, 0) / 1000 : this.lastBeatT;
     for (const rr of m.rr) {
