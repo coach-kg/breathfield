@@ -1,4 +1,21 @@
-# Minigames: ideas
+# Minigames
+
+**Playable now** (press **Play** in the dock): Stillfall, Slow Snake, Lantern, Cairn, Bow.
+**Still ideas:** Tailwind, Garden. Below are the original sketches, kept as the design notes.
+
+| Game | Keys | Touch | What coherence does |
+| --- | --- | --- | --- |
+| Stillfall | ← → move, ↑ turn, ↓ faster, Shift drop | tap turn, drag move, flick down drop | time slows to half; ghost piece and second preview in the high zone |
+| Slow Snake | arrows or WASD | swipe | slower snake; a minute of high zone charges one glide through yourself |
+| Lantern | ← → walk, ↑ or X jump | hold a side to walk, swipe up or tap to jump | wider light shows hidden ledges and stars; kinder gifts from "?" blocks |
+| Cairn | ↓ or X drop | tap | the next stone swings less; dropping on the out-breath settles it |
+| Bow | ↑ ↓ aim, hold → to draw | drag back and let go | steadier aim, the flight path shows; out-breath release doubles points |
+
+`P` or `Esc` pauses. In practice mode (no sensor) Space is still "breathing in"; on a phone a round
+pad appears for it. Entering a game starts a session if none is running, and the journal lists the
+games you played with your scores.
+
+# Ideas
 
 HeartMath's emWave Pro once sold extra games where your coherence was the throttle, among them
 a dolphin race where a calm heart meant a faster swim. Lovely idea, steep price. These are our
@@ -46,7 +63,7 @@ from a new *Games* entry next to the scene picker.
  └──────────┘
 ```
 
-- **Coherence slows time**: gravity × (1 − 0.6 · coh). High coherence feels like slow motion.
+- **Coherence slows time**: gravity × (1 − 0.5 · coh). High coherence feels like slow motion.
 - **High zone adds help**: a ghost piece and a second "next" preview fade in.
 - **Breath**: the well's glow swells with the pacer; nothing to press for breathing.
 - Why it works: Tetris is calming when slow and stressful when fast, so the heart controls the

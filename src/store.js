@@ -102,6 +102,7 @@ export async function exportAll() {
     exportedAt: new Date().toISOString(),
     settings: await get('settings', null),
     level: await get('level', null),
+    games: await get('games', null),
     sessions: (await allSessions()).sort((a, b) => a.start.localeCompare(b.start)),
   };
 }
@@ -123,6 +124,15 @@ export async function importAll(data) {
     await set('level', data.level);
   }
   if (data.settings && !(await get('settings', null))) await set('settings', data.settings);
+  if (data.games && typeof data.games === 'object') {
+    const g = { ...(await get('games', {})) };
+    for (const [k, v] of Object.entries(data.games)) {
+      if (!v) continue;
+      const o = g[k] || { best: 0, plays: 0 };
+      g[k] = { best: Math.max(o.best || 0, v.best || 0), plays: Math.max(o.plays || 0, v.plays || 0) };
+    }
+    await set('games', g);
+  }
   return added;
 }
 

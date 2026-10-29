@@ -275,3 +275,27 @@ input[type="range"] { accent-color: var(--accent); width: min(260px, 100%); }
 @media (prefers-reduced-motion: reduce) {
   .panel, .card { animation: none; }
 }
+
+/* Games */
+.games { display: grid; gap: 8px; }
+.gcard { display: grid; grid-template-columns: 34px 1fr auto; gap: 4px 12px; align-items: center; text-align: left; text-transform: none; letter-spacing: 0; border: 1px solid var(--line); padding: 12px; }
+.gcard .gi { grid-row: span 2; font-size: 20px; color: var(--accent); text-align: center; }
+.gcard b { font-family: var(--f-display); font-weight: 300; font-size: 13px; }
+.gcard span.d { grid-column: 2 / 4; color: var(--mute); font-size: 10.5px; line-height: 1.45; }
+.gcard .best { color: var(--mute); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.1em; }
+.gcard[disabled] { opacity: 0.5; }
+.gcard.on { border-color: var(--accent); }
+.gamebar { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 14px); right: max(16px, env(safe-area-inset-right, 0px)); display: flex; gap: 8px; align-items: center; pointer-events: auto; transition: opacity 1.2s ease; }
+.gamebar > b { font-family: var(--f-display); font-weight: 300; font-size: 12px; margin-right: 4px; }
+.ui.idle .gamebar { opacity: 0.35; }
+.breathpad { position: absolute; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 210px); width: 74px; height: 74px; border-radius: 50%; border: 1px solid var(--line); background: var(--veil); pointer-events: auto; font-size: 9px; line-height: 1.35; touch-action: none; user-select: none; -webkit-user-select: none; }
+.breathpad.on { background: var(--ink); color: var(--void); }
+body.gaming .cue { display: none; }
+body.gaming #stage canvas { cursor: default; }
+#playBtn .gpad { vertical-align: -4px; margin-right: 8px; }
+#playBtn.on { border-color: var(--accent); color: var(--accent); }
+@media (max-width: 700px) {
+  body.gaming .read .row:not(:first-child), body.gaming #spark, body.gaming .src { display: none; }
+  body.gaming .brand { display: none; }
+  .gamebar > b { display: none; }
+}
