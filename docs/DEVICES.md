@@ -10,25 +10,25 @@ The coherence engine only needs beats, so adding a device means turning its data
 
 ## emWave 2 / emWave Pro (USB)
 
-What we know so far, from your Mac:
+Confirmed on a Mac:
 
 ```
-Vendor ID: 0x0e30 (HeartMath LLC)
-Version: 0.81, full speed (12 Mb/s), draws 500 mA
+HeartMath emWave 2
+Vendor ID   0x0E30 (HeartMath LLC), manufacturer string "Quantum Intech Inc."
+Product ID  0x0008
+Version     0.81, full speed (12 Mb/s), draws 500 mA
+HID         yes: AppleUserHIDDevice, usage page 0xFF00 (vendor-defined), usage 0xFF
 ```
 
-Still needed: the product ID and whether macOS treats it as a HID device.
+Because it is a vendor-defined HID device, macOS needs no driver and Chrome or Edge can open it
+through WebHID. The data layout inside the reports is HeartMath's own, which is what Step 2 is for.
 
-### Step 1: identify
-
-Quit emWave Pro, plug in the sensor, then in Terminal:
+To check another unit:
 
 ```bash
 hidutil list | grep -i -E "e30|heartmath"
 system_profiler SPUSBDataType | grep -i -B 4 -A 4 "0x0e30"
 ```
-
-If `hidutil` lists it, it is a HID device and Chrome can talk to it directly (WebHID).
 
 ### Step 2: record
 

@@ -17,6 +17,9 @@ import { Device } from './device.js';
 import { BeatDetector } from './ppg.js';
 
 export const HEARTMATH_VENDOR_ID = 0x0e30;
+// Seen on an emWave 2 (firmware 0.81, made by Quantum Intech Inc.):
+// product 0x0008, one vendor-defined HID collection (usage page 0xFF00, usage 0xFF).
+export const EMWAVE2_PRODUCT_ID = 0x0008;
 const hex = (u8) => Array.from(u8, (b) => b.toString(16).padStart(2, '0')).join(' ');
 
 /**
