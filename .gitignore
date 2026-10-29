@@ -1,0 +1,6 @@
+node_modules/
+.DS_Store
+*.jsonl
+emwave-capture*.json
+breathfield-emwave-snapshot-*/
+__pycache__/

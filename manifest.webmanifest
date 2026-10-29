@@ -1,0 +1,11 @@
+{
+  "name": "Breathfield",
+  "short_name": "Breathfield",
+  "description": "Generative breathing visuals with a pacer, heart coherence, streaks and badges.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "background_color": "#06050a",
+  "theme_color": "#06050a",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
