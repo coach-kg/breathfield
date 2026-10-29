@@ -165,6 +165,7 @@ function startSession() {
     scenes: new Set([SCENES[app.settings.scene].id]),
     d: +activeD(app.level).toFixed(3),
     thresholds: thresholdsFor(activeD(app.level)),
+    lengthMin: app.settings.sessionMin, // a change mid-session applies from the next one
     timeIn: [0, 0, 0],
     scores: [],
     hrs: [],
@@ -388,7 +389,7 @@ function renderSecond() {
   }
   const hr = app.engine.heartRate();
   $('hr').textContent = hr ? Math.round(hr) : '—';
-  $('clock').textContent = app.session ? fmtClock(now() - app.session.t0) + (app.settings.sessionMin ? ` / ${app.settings.sessionMin}:00` : '') : 'not recording';
+  $('clock').textContent = app.session ? fmtClock(now() - app.session.t0) + (app.session.lengthMin ? ` / ${app.session.lengthMin}:00` : '') : 'not recording';
   const r = rankOf(app.level);
   $('rank').textContent = RANKS[r].name;
   $('rankD').textContent = activeD(app.level).toFixed(1);
@@ -828,7 +829,7 @@ new p5((p) => {
     renderHud(br);
     renderTint(app.visual);
     drone.update(br.b, app.score == null ? null : app.visual);
-    if (app.session && app.settings.sessionMin && t - app.session.t0 >= app.settings.sessionMin * 60) endSession(true);
+    if (app.session && app.session.lengthMin && t - app.session.t0 >= app.session.lengthMin * 60) endSession(true);
     secTimer += dt;
     if (secTimer >= 1) { secTimer = 0; renderSecond(); }
   };
