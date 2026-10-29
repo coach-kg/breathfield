@@ -13,6 +13,7 @@ export const SCENES = [
   { id: 'moire', name: 'Moiré' },
   { id: 'lines', name: 'Lines' },
   { id: 'flow', name: 'Flow' },
+  { id: 'golden', name: 'Golden' },
 ];
 
 const TAU = Math.PI * 2;
@@ -87,8 +88,8 @@ void main(){
 // Two quality profiles. Light keeps the same look with fewer elements, a
 // lower shader resolution and a cheap fake blur, for phones and slow machines.
 export const QUALITY = {
-  full: { gl: 1, swarm: 1, flow: 1, lineLayers: 5, linePts: 1100, blur: true },
-  light: { gl: 0.62, swarm: 0.45, flow: 0.45, lineLayers: 3, linePts: 560, blur: false },
+  full: { gl: 1, swarm: 1, flow: 1, lineLayers: 5, linePts: 1100, blur: true, seeds: 1100 },
+  light: { gl: 0.62, swarm: 0.45, flow: 0.45, lineLayers: 3, linePts: 560, blur: false, seeds: 520 },
 };
 
 export function createScenes(p) {
@@ -295,6 +296,80 @@ export function createScenes(p) {
     }
   }
 
+  // Golden: a sunflower head (phyllotaxis). Seed n sits at angle n × the golden
+  // angle and radius √n, which draws the interlocking Fibonacci spirals
+  // (8, 13, 21, 34 …). Seeds are born in the centre and drift outward forever,
+  // an endless zoom. Coherence decides how exact the golden angle is: a few
+  // tenths of a degree off and the spirals fall apart into rays and noise;
+  // settle, and the order grows back. Breath sets the drift speed and glow;
+  // faint golden spirals turn above it when you are coherent.
+  const GOLDEN = Math.PI * (3 - Math.sqrt(5)); // 137.507…°
+  const PHI = (1 + Math.sqrt(5)) / 2;
+  const gd = { flow: 0, err: 0, rot: 0 };
+  function golden(f) {
+    const ctx = p.drawingContext, W = p.width, H = p.height, cx = W / 2, cy = H / 2;
+    const md = Math.min(W, H), coh = f.coh, chaos = 1 - coh;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = `rgba(6,5,10,${0.32 + 0.2 * coh})`;
+    ctx.fillRect(0, 0, W, H);
+    const N = Q.seeds;
+    gd.flow += f.dt * (1.2 + 5 * f.b) * (N / 900);
+    // The angle error wanders on its own; coherence shrinks it toward zero.
+    const wander = p.noise(f.T * 0.05) - 0.5;
+    gd.err += ((wander * 0.03 + 0.012) * chaos * chaos - gd.err) * Math.min(1, f.dt * 0.5);
+    const ang = GOLDEN + gd.err;
+    gd.rot += f.dt * 0.03;
+    const R = md * 0.5 * (0.92 + 0.08 * f.b);
+    const c = R / Math.sqrt(N);
+    const base = f.hue;
+    ctx.globalCompositeOperation = 'lighter';
+    const buckets = 8;
+    const paths = Array.from({ length: buckets }, () => new Path2D());
+    for (let k = 0; k < N; k++) {
+      // s grows continuously; wrapping returns a seed to the centre as a new one.
+      const s = ((k + gd.flow) % N) + 0.5;
+      const r = c * Math.sqrt(s);
+      // Scattered: every seed drifts off its place on its own; coherent: all in line.
+      const wob = p.noise(k * 0.21, f.T * 0.25) - 0.5;
+      const a = s * ang + gd.rot + chaos * chaos * 0.9 * wob;
+      const j = chaos * md * 0.035 * (p.noise(k * 0.13, f.T * 0.3) - 0.5);
+      const x = cx + Math.cos(a) * (r + j), y = cy + Math.sin(a) * (r + j);
+      const size = (0.6 + 2.6 * Math.sqrt(s / N)) * (0.9 + 0.3 * f.b);
+      const bucket = Math.floor(((s / PHI) % 1) * buckets);
+      paths[bucket].moveTo(x + size, y);
+      paths[bucket].arc(x, y, size, 0, TAU);
+    }
+    for (let q = 0; q < buckets; q++) {
+      const hue = ((base + q / buckets * (0.18 + 0.5 * chaos)) % 1) * 360;
+      ctx.fillStyle = `hsla(${hue.toFixed(0)},${(30 + 60 * coh).toFixed(0)}%,${(55 + 15 * coh).toFixed(0)}%,${(0.35 + 0.35 * coh).toFixed(3)})`;
+      ctx.fill(paths[q]);
+    }
+    // Golden spirals (r grows by φ every quarter turn), visible when coherent.
+    if (coh > 0.35) {
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = `rgba(239,234,255,${((coh - 0.35) * 0.35 * (0.6 + 0.4 * f.b)).toFixed(3)})`;
+      const k = Math.log(PHI) / (Math.PI / 2);
+      for (let arm = 0; arm < 5; arm++) {
+        ctx.beginPath();
+        for (let i = 0; i <= 160; i++) {
+          const th = (i / 160) * 4.5 * Math.PI;
+          const r = md * 0.012 * Math.exp(k * th);
+          if (r > R * 1.05) break;
+          const a = th + (arm * TAU) / 5 - gd.rot * 2 - gd.flow * 0.004;
+          const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
+          i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+        }
+        ctx.stroke();
+      }
+    }
+    // A soft glow at the heart of the flower, breathing.
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, md * (0.06 + 0.06 * f.b));
+    g.addColorStop(0, `hsla(${(base * 360).toFixed(0)},70%,80%,${(0.25 + 0.35 * coh).toFixed(3)})`);
+    g.addColorStop(1, 'hsla(0,0%,0%,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(cx - md * 0.15, cy - md * 0.15, md * 0.3, md * 0.3);
+  }
+
   return {
     get glOK() { return glOK; },
     orbitBy(dx, dy) { view.yaw += dx * 0.008; view.pitch += dy * 0.008; view.vyaw = 0; view.vpitch = 0; },
@@ -313,7 +388,8 @@ export function createScenes(p) {
       else if (s === 2) swarm(f);
       else if (s === 3) moire(f);
       else if (s === 4) lines(f);
-      else flow(f);
+      else if (s === 5) flow(f);
+      else golden(f);
     },
   };
 }
