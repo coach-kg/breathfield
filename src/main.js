@@ -68,6 +68,7 @@ const DEVICES = [
     desc: 'Hold space, or press and hold the screen, while you breathe in, and let go as you breathe out. Breathing evenly with the pacer builds coherence. Counts for streaks, not for rank.' },
   { id: 'ble', cls: BleHeartRate, title: 'Bluetooth heart-rate strap', short: 'Strap', tag: 'most accurate', good: true,
     desc: 'Polar H10, Garmin HRM, Wahoo TICKR or any strap that sends beat intervals. Chrome or Edge.' },
+  { id: 'bleAll', cls: BleHeartRate, make: () => new BleHeartRate({ showAll: true }), hidden: true, title: 'Bluetooth (all devices)', short: 'Bluetooth' },
   { id: 'emwave', cls: EmWaveHid, title: 'emWave 2 (USB)', short: 'emWave', tag: 'read-only', good: true,
     desc: 'Quit emWave Pro, plug in the emWave 2 and start a session on it. Breathfield reads its heartbeats and its own low / medium / high verdict, and never writes to the device.' },
   { id: 'camera', cls: CameraPpg, make: () => new CameraPpg({ deviceId: app.settings.cameraId }), title: 'Fingertip on the camera', short: 'Camera', tag: 'phone',
@@ -120,7 +121,10 @@ async function connect(id) {
     app.settings.device = id;
     saveSettings();
   } catch (err) {
-    const msg = err && err.name === 'NotFoundError' ? 'No device was chosen.'
+    const ble = id === 'ble' || id === 'bleAll';
+    const msg = err && err.name === 'NotFoundError' && ble
+      ? `The Bluetooth list closed without a device${err.message ? ` (${err.message})` : ''}. Is the watch sharing heart rate right now? On Android, also allow Nearby devices (or Location) for this browser. If the watch never appears, try "Show all devices", or use Chrome.`
+      : err && err.name === 'NotFoundError' ? `No device was chosen${err.message ? ` (${err.message})` : ''}.`
       : err && (err.name === 'SecurityError' || err.name === 'NotAllowedError') ? 'The browser blocked access. Run Breathfield from its own address (GitHub Pages or start.command) in Chrome or Edge, and allow access when asked.'
       : (err && err.message) || 'Could not connect.';
     dev.status(msg, 'warn');
@@ -327,11 +331,14 @@ function renderStatus() {
 
 function renderDevices() {
   const list = $('deviceList');
-  list.innerHTML = DEVICES.map((d) => {
+  list.innerHTML = DEVICES.filter((d) => !d.hidden || app.deviceId === d.id).map((d) => {
     const why = d.cls.support();
     const active = app.deviceId === d.id && app.device;
     const st = active ? `<div class="st" data-state="${app.device.state}">${esc(app.device.text || '')}</div>` : '';
     let extra = d.id === 'emwave' && active ? `<button class="solo" data-capture>Save raw recording (${app.device.packets.length} packets)</button>` : '';
+    if (d.id === 'ble' && !active && !d.cls.support()) {
+      extra += `<button class="solo" data-connect="bleAll">Show all devices</button>`;
+    }
     if (d.id === 'camera' && active) {
       if (!app.device.front) extra += `<button class="solo" data-torch aria-pressed="${app.device.torch}">${app.device.torch ? 'Flashlight on' : app.device.torchSupported ? 'Flashlight off' : 'Try flashlight'}</button>`;
       extra += `<button class="solo" data-screenlight aria-pressed="${app.settings.screenLight}">Screen light ${app.settings.screenLight ? 'on' : 'off'}</button>`;

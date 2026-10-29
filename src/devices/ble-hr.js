@@ -20,10 +20,12 @@ export function parseHeartRateMeasurement(view) {
 }
 
 export class BleHeartRate extends Device {
-  constructor() {
+  /** showAll: list every nearby device, for watches that do not advertise the heart-rate service. */
+  constructor({ showAll = false } = {}) {
     super('ble', 'Bluetooth heart-rate strap');
     this.kind = 'sensor';
     this.lag = 1.2; // intervals arrive in batches about once a second
+    this.showAll = showAll;
   }
 
   static support() {
@@ -32,13 +34,18 @@ export class BleHeartRate extends Device {
   }
 
   async connect() {
-    this.status('Choose your strap in the browser dialog…');
-    const dev = await navigator.bluetooth.requestDevice({ filters: [{ services: ['heart_rate'] }] });
+    this.status(this.showAll ? 'Pick your watch or strap from the list…' : 'Choose your strap or watch in the browser dialog…');
+    const dev = await navigator.bluetooth.requestDevice(this.showAll
+      ? { acceptAllDevices: true, optionalServices: ['heart_rate'] }
+      : { filters: [{ services: ['heart_rate'] }] });
     this.btDevice = dev;
     dev.addEventListener('gattserverdisconnected', () => this.status('Disconnected', 'off'));
     this.status(`Connecting to ${dev.name || 'strap'}…`);
     const server = await dev.gatt.connect();
-    const svc = await server.getPrimaryService('heart_rate');
+    let svc;
+    try { svc = await server.getPrimaryService('heart_rate'); } catch (e) {
+      throw new Error(`${dev.name || 'This device'} has no heart-rate service right now. On the watch, start sharing heart rate first (for Polar: Start training, then Share HR with other devices).`);
+    }
     const ch = await svc.getCharacteristic('heart_rate_measurement');
     this._onValue = (e) => this.handle(e.target.value);
     ch.addEventListener('characteristicvaluechanged', this._onValue);
