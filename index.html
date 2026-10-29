@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Breathfield</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Generative breathing visuals with a pacer, coherence from a heart sensor, streaks and badges.">
+<meta name="theme-color" content="#06050a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@300;400;500&family=Unbounded:wght@200;300;500&display=swap">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<main id="stage" aria-label="Breathing visual"></main>
+
+<div class="ui" id="ui">
+  <header class="top">
+    <div class="brand">Breathfield</div>
+    <div class="read">
+      <div class="row"><span class="k">Coherence</span><span class="v" id="score">—</span><span class="lvl" id="lvl">warming up</span></div>
+      <div class="meter" id="meter" data-lvl="0"><i></i><i></i><i></i></div>
+      <canvas id="spark" width="300" height="68" aria-label="Coherence over the last two minutes"></canvas>
+      <div class="row"><span class="k">Heart</span><span id="hr">—</span><span class="u">bpm</span></div>
+      <div class="row"><span class="k">Pace</span><span id="rate">6.0</span><span class="u">/min</span></div>
+      <div class="row"><span class="k">Rank</span><span id="rank">Gentle</span><span class="u" id="rankD">0.0</span></div>
+      <div class="row"><span class="k">Session</span><span id="clock">not recording</span></div>
+      <div class="src" id="src">Starting…</div>
+    </div>
+  </header>
+
+  <div class="cue" id="cueWrap">
+    <div id="cue">in</div>
+    <div id="cueSec">5</div>
+  </div>
+
+  <footer class="dock" id="dock">
+    <div class="grp" role="group" aria-label="Scene" id="scenes"></div>
+    <label class="sel" for="pat"><span>Breath</span><select id="pat"></select></label>
+    <button class="solo" id="sensorBtn">Sensor: <b id="sensorName">Practice</b></button>
+    <span class="spacer"></span>
+    <button class="solo primary" id="sessionBtn">Start session</button>
+    <button class="solo" id="journalBtn">Journal</button>
+    <button class="solo" id="sound" aria-pressed="false">Sound</button>
+    <button class="solo" id="guide" aria-pressed="true">Guide</button>
+    <button class="solo" id="full">Fullscreen</button>
+    <p class="hint" id="hint">Hold <kbd>space</kbd>, or press and hold the screen, while you breathe in. Let go as you breathe out. <kbd>Enter</kbd> starts a session, <kbd>J</kbd> opens the journal, <kbd>1</kbd>–<kbd>4</kbd> switch scenes, <kbd>H</kbd> hides everything.</p>
+  </footer>
+</div>
+
+<aside class="panel" id="sensorPanel" hidden aria-labelledby="sensorTitle">
+  <div class="panel-head">
+    <h2 id="sensorTitle">Heart sensor</h2>
+    <button class="x" data-close="sensorPanel" aria-label="Close">Close</button>
+  </div>
+  <div class="panel-body">
+    <p class="lede">Every source feeds the same coherence engine: the last 64 seconds of beat intervals, scored every 5 seconds.</p>
+    <div id="deviceList" class="devices"></div>
+    <div class="live">
+      <div class="live-head"><span class="k">Beat intervals, last minute</span><span class="u" id="beatInfo">no beats yet</span></div>
+      <canvas id="wave" width="760" height="160"></canvas>
+    </div>
+  </div>
+</aside>
+
+<aside class="panel wide" id="journalPanel" hidden aria-labelledby="journalTitle">
+  <div class="panel-head">
+    <h2 id="journalTitle">Journal</h2>
+    <button class="x" data-close="journalPanel" aria-label="Close">Close</button>
+  </div>
+  <div class="tabs" role="tablist" id="tabs">
+    <button role="tab" data-tab="progress" aria-selected="true">Progress</button>
+    <button role="tab" data-tab="badges" aria-selected="false">Badges</button>
+    <button role="tab" data-tab="sessions" aria-selected="false">Sessions</button>
+    <button role="tab" data-tab="settings" aria-selected="false">Settings</button>
+  </div>
+  <div class="panel-body">
+    <section id="tab-progress" class="tab"></section>
+    <section id="tab-badges" class="tab" hidden></section>
+    <section id="tab-sessions" class="tab" hidden></section>
+    <section id="tab-settings" class="tab" hidden>
+      <h3>Difficulty</h3>
+      <label class="check" for="adaptive"><input type="checkbox" id="adaptive"> Adapt thresholds to my practice</label>
+      <p class="note">On: after each sensor session of 3 minutes or more, the low / medium / high thresholds move so that you spend about half your time in high. A rank you reach holds through a grey zone and only eases down after 7 weak sessions in a row. Rank badges stay forever.</p>
+      <label class="field" for="manualRank"><span>Fixed rank (when adapting is off)</span>
+        <select id="manualRank"></select>
+      </label>
+      <h3>Sessions</h3>
+      <label class="field" for="sessionMin"><span>Session length</span>
+        <select id="sessionMin">
+          <option value="0">Open, I stop it myself</option>
+          <option value="3">3 minutes</option>
+          <option value="5">5 minutes</option>
+          <option value="10">10 minutes</option>
+          <option value="15">15 minutes</option>
+          <option value="20">20 minutes</option>
+          <option value="30">30 minutes</option>
+        </select>
+      </label>
+      <label class="field" for="rollover"><span>A new day starts at</span>
+        <select id="rollover">
+          <option value="0">midnight</option><option value="1">1:00</option><option value="2">2:00</option>
+          <option value="3">3:00</option><option value="4">4:00</option><option value="5">5:00</option>
+        </select>
+      </label>
+      <label class="field" for="volume"><span>Sound volume</span><input type="range" id="volume" min="0" max="100" value="60"></label>
+      <h3>Your data</h3>
+      <p class="note" id="storageNote">Sessions are saved in this browser. Export a JSON file to keep a copy or move to another device.</p>
+      <div class="btns">
+        <button class="solo" id="exportBtn">Export JSON</button>
+        <label class="solo filebtn" for="importFile">Import JSON<input type="file" id="importFile" accept="application/json,.json"></label>
+        <button class="solo" id="backupBtn">Back up to a file…</button>
+      </div>
+      <p class="note" id="backupNote"></p>
+    </section>
+  </div>
+</aside>
+
+<section class="summary" id="summary" hidden role="dialog" aria-labelledby="sumTitle">
+  <div class="card" id="summaryCard"></div>
+</section>
+
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
