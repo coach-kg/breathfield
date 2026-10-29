@@ -6,6 +6,7 @@ import { byDay, runs, currentStreak, bestStreak, totals, dayKey, addDays, keyToD
 import * as store from './store.js';
 import { Drone } from './audio.js';
 import { SCENES, createScenes, drawGuide, drawWaveGuide } from './visuals/scenes.js';
+const isPhone = matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 820;
 import { badgeGlyph } from './visuals/badges.js';
 import { PracticeKeys, DemoSensor } from './devices/simulated.js';
 import { BleHeartRate } from './devices/ble-hr.js';
@@ -31,7 +32,7 @@ const now = () => performance.now() / 1000;
 const motion = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.45 : 1;
 
 const DEFAULT_SETTINGS = { scene: 0, pattern: 0, guideMode: 'full', guideStyle: 'ring', volume: 0.6, sessionMin: 10, rollover: 3, device: 'practice', colours: 'own',
-  coherenceTint: 'soft', palette: 'classic', custom: { inS: 5, holdIn: 0, outS: 5, holdOut: 0 } };
+  coherenceTint: 'soft', quality: 'auto', screenLight: false, palette: 'classic', custom: { inS: 5, holdIn: 0, outS: 5, holdOut: 0 } };
 
 const app = {
   settings: { ...DEFAULT_SETTINGS },
@@ -107,6 +108,7 @@ async function connect(id) {
   });
   renderStatus();
   renderDevices();
+  applyScreenLight();
   try {
     await dev.connect();
     app.settings.device = id;
@@ -130,6 +132,13 @@ function onBeat(dev, { t, ibi }) {
   // so the blinks keep your real rhythm instead of bunching up when a batch arrives.
   app.flashes.push({ at: t + (dev.lag || 0), ok });
   if (app.flashes.length > 20) app.flashes.shift();
+}
+
+// Screen light: a bright band at the top of the screen, next to the front camera,
+// so a fingertip on the front lens is lit from the screen.
+function applyScreenLight() {
+  const on = app.settings.screenLight && app.deviceId === 'camera';
+  $('screenLight').hidden = !on;
 }
 
 let beatGlow = 0, beatOk = true;
@@ -313,6 +322,10 @@ function renderDevices() {
     const active = app.deviceId === d.id && app.device;
     const st = active ? `<div class="st" data-state="${app.device.state}">${esc(app.device.text || '')}</div>` : '';
     let extra = d.id === 'emwave' && active ? `<button class="solo" data-capture>Save raw recording (${app.device.packets.length} packets)</button>` : '';
+    if (d.id === 'camera' && active) {
+      if (app.device.torchSupported) extra += `<button class="solo" data-torch aria-pressed="${app.device.torch}">Flashlight ${app.device.torch ? 'on' : 'off'}</button>`;
+      extra += `<button class="solo" data-screenlight aria-pressed="${app.settings.screenLight}">Screen light ${app.settings.screenLight ? 'on' : 'off'}</button>`;
+    }
     if (d.id === 'camera' && active && app.device.cameras && app.device.cameras.length > 1) {
       extra += `<label class="field camsel" for="cameraSel"><span>Camera${app.device.lens ? ` · now ${esc(app.device.lens)}` : ''}</span><select id="cameraSel">${app.device.cameras.map((c) => `<option value="${esc(c.id)}" ${c.id === app.device.current ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}</select></label>`;
     }
@@ -340,6 +353,12 @@ $('deviceList').addEventListener('click', async (e) => {
     await app.device.disconnect();
     app.device = null; app.deviceId = null; app.score = null; app.zone = null;
     renderStatus(); renderDevices();
+  }
+  if (e.target.closest('[data-torch]') && app.device && app.device.setTorch) {
+    await app.device.setTorch(!app.device.torch); renderDevices();
+  }
+  if (e.target.closest('[data-screenlight]')) {
+    app.settings.screenLight = !app.settings.screenLight; saveSettings(); applyScreenLight(); renderDevices();
   }
   if (e.target.closest('[data-capture]') && app.device && app.device.capture) {
     store.download(`emwave-capture-${new Date().toISOString().slice(0, 19).replace(/:/g, '')}.json`, app.device.capture());
@@ -548,6 +567,7 @@ async function renderSettings() {
   $('manualRank').value = String(app.level.manualRank);
   $('sessionMin').value = String(app.settings.sessionMin);
   $('colours').value = app.settings.colours;
+  $('quality').value = app.settings.quality;
   $('tint').value = app.settings.coherenceTint;
   $('palette').value = app.settings.palette;
   $('rollover').value = String(app.settings.rollover);
@@ -689,6 +709,10 @@ $('manualRank').addEventListener('change', async (e) => {
   app.level = { ...app.level, manualRank: +e.target.value };
   await store.set('level', app.level); renderJournal();
 });
+$('quality').addEventListener('change', (e) => {
+  app.settings.quality = e.target.value; saveSettings();
+  applyQuality(e.target.value === 'auto' ? (isPhone ? 'light' : 'full') : e.target.value);
+});
 $('colours').addEventListener('change', (e) => { app.settings.colours = e.target.value; saveSettings(); });
 $('sessionMin').addEventListener('change', (e) => { app.settings.sessionMin = +e.target.value; saveSettings(); });
 $('rollover').addEventListener('change', (e) => { app.settings.rollover = +e.target.value; saveSettings(); app.badges = evaluateBadges(); renderJournal(); });
@@ -785,17 +809,41 @@ addEventListener('keyup', (e) => { if (e.code === 'Space') { e.preventDefault();
 
 // ---------------------------------------------------------------- p5 loop
 
-let scenes = null;
+let scenes = null, P = null, qualityNow = null;
+const fpsWin = { n: 0, t0: 0, warned: false };
+
+/** full or light: pixel density, frame rate and scene detail. */
+function applyQuality(level, initial = false) {
+  if (!P || !scenes || (level === qualityNow && !initial)) return;
+  qualityNow = level;
+  scenes.setQuality(level);
+  P.pixelDensity(level === 'light' ? 1 : Math.min(2, P.displayDensity()));
+  P.frameRate(level === 'light' ? 30 : 60);
+  P.resizeCanvas(window.innerWidth, window.innerHeight);
+  scenes.resize(); scenes.clear();
+  fpsWin.n = 0; fpsWin.t0 = performance.now();
+}
+
+/** Auto mode: if it runs below 40 fps for 5 seconds, switch to light once. */
+function watchFps() {
+  if (app.settings.quality !== 'auto' || qualityNow !== 'full' || document.hidden) { fpsWin.n = 0; fpsWin.t0 = performance.now(); return; }
+  fpsWin.n++;
+  const el = performance.now() - fpsWin.t0;
+  if (el > 5000) {
+    const fps = (fpsWin.n * 1000) / el;
+    fpsWin.n = 0; fpsWin.t0 = performance.now();
+    if (fps < 40) { applyQuality('light'); toast(`Switched to light graphics to keep things smooth (was ${Math.round(fps)} fps).`); }
+  }
+}
 let T = 0, hue = Math.random(), travel = 0, secTimer = 0;
 
 new p5((p) => {
   p.setup = () => {
     const c = p.createCanvas(window.innerWidth, window.innerHeight);
     c.parent('stage');
-    p.pixelDensity(Math.min(2, p.displayDensity()));
+    P = p;
     scenes = createScenes(p);
-    scenes.resize();
-    scenes.clear();
+    applyQuality(app.settings.quality === 'auto' ? (isPhone ? 'light' : 'full') : app.settings.quality, true);
     if (!scenes.glOK) document.querySelectorAll('#sceneSel option[value="0"],#sceneSel option[value="1"]').forEach((o) => { o.disabled = true; });
     // Press and hold = breathing in (practice). In Lines, dragging turns the figure instead.
     const drag = { on: false, moved: false, x: 0, y: 0, t: 0, vx: 0, vy: 0 };
@@ -831,6 +879,7 @@ new p5((p) => {
     scenes.resize(); scenes.clear();
   };
   p.draw = () => {
+    watchFps();
     const dt = Math.min(p.deltaTime / 1000, 0.1);
     const t = now();
     const sdt = dt * motion;
@@ -888,6 +937,7 @@ window.breathfield = { app, startSession, endSession, connect };
   if (app.settings.guide === false && !('guideMode' in (await store.get('settings', {})))) app.settings.guideMode = 'off';
   delete app.settings.guide;
   applyGuide();
+  if (P) applyQuality(app.settings.quality === 'auto' ? (isPhone ? 'light' : 'full') : app.settings.quality);
   // Sensors that need a browser dialog cannot reconnect on their own, so we
   // start with practice (or the demo) and let you pick the sensor again.
   connect(['practice', 'demo'].includes(app.settings.device) ? app.settings.device : 'practice');

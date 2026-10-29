@@ -18,6 +18,7 @@
 <body>
 <main id="stage" aria-label="Breathing visual"></main>
 <div class="tint" id="tintColor" aria-hidden="true"></div>
+<div class="screenlight" id="screenLight" hidden aria-hidden="true"></div>
 <div class="tint glow" id="tintGlow" aria-hidden="true"></div>
 
 <div class="ui" id="ui">
@@ -134,6 +135,14 @@
         </select>
       </label>
       <p class="note">The Guide button and <kbd>G</kbd> step through the text options.</p>
+      <h3>Graphics</h3>
+      <label class="field" for="quality"><span>Quality</span>
+        <select id="quality">
+          <option value="auto">Auto: light on phones, and whenever it runs slowly</option>
+          <option value="full">Full</option>
+          <option value="light">Light: fewer details, 30 frames a second, easier on the battery</option>
+        </select>
+      </label>
       <h3>Colour</h3>
       <label class="field" for="tint"><span>Coherence colour in the visuals</span>
         <select id="tint">

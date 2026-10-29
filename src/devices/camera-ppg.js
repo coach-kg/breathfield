@@ -48,6 +48,8 @@ export class CameraPpg extends Device {
       const cur = this.cameras.find((c) => c.id === this.current);
       this.lens = cur ? cur.label : this.track.label;
     } catch (e) { this.cameras = []; }
+    const facing = this.track.getSettings ? this.track.getSettings().facingMode : '';
+    this.front = facing === 'user' || /front|user|facetime/i.test(this.lens || '');
 
     const v = document.createElement('video');
     v.playsInline = true; v.muted = true; v.srcObject = this.stream;
@@ -63,9 +65,11 @@ export class CameraPpg extends Device {
     this.running = true;
     this.status(this.torch
       ? 'Light on. Rest your fingertip gently over the lens and the light.'
-      : this.torchSupported
-        ? 'Could not switch the light on. Cover the lens with your fingertip and hold the phone toward a bright lamp.'
-        : 'This browser cannot switch the phone light on (Firefox cannot; Chrome and Samsung Internet can). Cover the lens and hold the phone toward a bright lamp.', this.torch ? 'busy' : 'warn');
+      : this.front
+        ? 'Front camera: it has no flashlight. Turn on Screen light below, or pick a back camera.'
+        : this.torchSupported
+          ? 'Could not switch the light on. Cover the lens with your fingertip and hold the phone toward a bright lamp.'
+          : 'This camera offers no light control in this browser (Firefox never does). Try Chrome or Samsung Internet, or hold the phone toward a bright lamp.', this.torch ? 'busy' : 'warn');
     this.loop();
   }
 
@@ -99,6 +103,12 @@ export class CameraPpg extends Device {
       }
     } catch (e) { /* frame not ready */ }
     this._next();
+  }
+
+  /** Switch the flashlight on or off where the browser allows it. */
+  async setTorch(on) {
+    if (!this.torchSupported) return false;
+    try { await this.track.applyConstraints({ advanced: [{ torch: on }] }); this.torch = on; return true; } catch (e) { return false; }
   }
 
   async disconnect() {
