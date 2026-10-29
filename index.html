@@ -42,18 +42,21 @@
   </div>
 
   <footer class="dock" id="dock">
-    <div class="grp" role="group" aria-label="Scene" id="scenes"></div>
-    <label class="sel" for="pat"><span>Breath</span><select id="pat"></select></label>
-    <button class="solo" id="paceBtn">Adjust pace</button>
-    <button class="solo" id="sensorBtn">Sensor: <b id="sensorName">Practice</b></button>
+    <label class="sel" for="sceneSel"><span>Scene</span><select id="sceneSel"></select></label>
+    <div class="sel" role="group" aria-label="Breathing">
+      <label for="pat"><span>Breath</span></label><select id="pat"></select>
+      <button class="ico" id="paceBtn" aria-label="Adjust pace" title="Adjust pace"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
+    </div>
+    <button class="solo" id="sensorBtn"><i class="sdot" id="sensorDot"></i><b id="sensorName">Practice</b></button>
     <span class="spacer"></span>
     <button class="solo primary" id="sessionBtn">Start session</button>
-    <button class="solo" id="journalBtn">Journal</button>
-    <button class="solo" id="settingsBtn">Settings</button>
-    <button class="solo" id="sound" aria-pressed="false">Sound</button>
-    <button class="solo" id="guide" aria-pressed="true">Guide</button>
-    <button class="solo" id="full">Fullscreen</button>
-    <p class="hint" id="hint">Hold <kbd>space</kbd>, or press and hold the screen, while you breathe in. Let go as you breathe out. <kbd>Enter</kbd> starts a session, <kbd>J</kbd> opens the journal, <kbd>1</kbd>–<kbd>6</kbd> switch scenes, <kbd>C</kbd> coherence colour, <kbd>,</kbd> settings, <kbd>H</kbd> hides everything.</p>
+    <div class="grp icons" role="group" aria-label="Tools">
+      <button class="ico" id="journalBtn" aria-label="Journal" title="Journal (J)"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/></svg></button>
+      <button class="ico" id="settingsBtn" aria-label="Settings" title="Settings (,)"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg></button>
+      <button class="ico" id="sound" aria-pressed="false" aria-label="Sound" title="Sound"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4h3l5 4V6L7 10z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/></svg></button>
+      <button class="ico" id="guide" aria-pressed="true" aria-label="Guide" title="Guide (G)"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/></svg></button>
+      <button class="ico" id="full" aria-label="Fullscreen" title="Fullscreen (F)"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+    </div>
   </footer>
 </div>
 
@@ -172,6 +175,8 @@
         </select>
       </label>
       <label class="field" for="volume"><span>Sound volume</span><input type="range" id="volume" min="0" max="100" value="60"></label>
+      <h3>Keys</h3>
+      <p class="note"><kbd>Space</kbd> hold while breathing in (practice) · <kbd>Enter</kbd> start or end a session · <kbd>1</kbd>–<kbd>6</kbd> scenes · <kbd>G</kbd> guide · <kbd>C</kbd> coherence colour · <kbd>J</kbd> journal · <kbd>,</kbd> settings · <kbd>H</kbd> hide everything · <kbd>F</kbd> fullscreen. In Lines, drag to turn the figure, scroll to zoom, double-click to reset.</p>
       <h3>Your data</h3>
       <p class="note" id="storageNote">Sessions are saved in this browser. Export a JSON file to keep a copy or move to another device.</p>
       <div class="btns">

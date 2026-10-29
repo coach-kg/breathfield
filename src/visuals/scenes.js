@@ -181,7 +181,9 @@ export function createScenes(p) {
   // frequencies onto whole numbers, so the figure closes into a clean,
   // symmetric knot; when scattered they drift between whole numbers, the curve
   // stays open and the strands smear apart into a soft blur.
-  const ln = { fy: 7, mx: 2, phi: 0, rot: 0 };
+  const ln = { fy: 7, mx: 2, phi: 0 };
+  // Orbit: yaw/pitch you can drag, with inertia and a slow drift of its own.
+  const view = { yaw: 0, pitch: 0.35, vyaw: 0, vpitch: 0, zoom: 1 };
   function lines(f) {
     const ctx = p.drawingContext, W = p.width, H = p.height, md = Math.min(W, H);
     const coh = f.coh, chaos = 1 - coh;
@@ -195,12 +197,18 @@ export function createScenes(p) {
     ln.fy += (snap(rawY) - ln.fy) * k;
     ln.mx += (snap(rawM) - ln.mx) * k;
     ln.phi += f.dt * (0.04 + 0.1 * chaos);
-    ln.rot += f.dt * 0.01;
-    const R = md * 0.34 * (0.8 + 0.2 * f.b);
+    // Inertia from a flick, then the figure keeps drifting slowly on its own.
+    view.yaw += (view.vyaw + 0.06) * f.dt;
+    view.pitch += view.vpitch * f.dt;
+    view.pitch = Math.max(-1.4, Math.min(1.4, view.pitch));
+    const damp = Math.pow(0.15, f.dt);
+    view.vyaw *= damp; view.vpitch *= damp;
+    const R = md * 0.34 * (0.8 + 0.2 * f.b) * view.zoom;
     const layers = 5, N = 1100;
     ctx.globalCompositeOperation = 'lighter';
     ctx.lineJoin = 'round';
-    const cr = Math.cos(ln.rot), sr = Math.sin(ln.rot);
+    const cyw = Math.cos(view.yaw), syw = Math.sin(view.yaw), cp = Math.cos(view.pitch), sp = Math.sin(view.pitch);
+    const fov = md * 1.8;
     for (let L = 0; L < layers; L++) {
       const off = (L - (layers - 1) / 2) * (0.004 + 0.06 * chaos);
       const hue = (f.hue * 360 + L * (6 + 20 * chaos)) % 360;
@@ -214,10 +222,14 @@ export function createScenes(p) {
         const a = (i / N) * TAU;
         const x = Math.sin(a * ln.fy + ln.phi + off) * Math.cos(a + off * 3);
         const y = Math.sin(a * (ln.fy - 1) + off * 2) * Math.cos(a * ln.mx);
+        const z = Math.cos(a * ln.mx + off) * Math.sin(a * 2 + ln.phi * 0.5);
         const jx = chaos * md * 0.012 * (p.noise(i * 0.03, L * 3.1, f.T * 0.25) - 0.5);
         const jy = chaos * md * 0.012 * (p.noise(i * 0.03 + 40, L * 3.1, f.T * 0.25) - 0.5);
-        const X = x * R * 1.25 + jx, Y = y * R + jy;
-        const px = W / 2 + X * cr - Y * sr, py = H / 2 + X * sr + Y * cr;
+        const X = x * R * 1.2 + jx, Y = y * R + jy, Z = z * R * 0.9;
+        const x1 = X * cyw + Z * syw, z1 = -X * syw + Z * cyw;
+        const y2 = Y * cp - z1 * sp, z2 = Y * sp + z1 * cp;
+        const s = fov / (fov + z2);
+        const px = W / 2 + x1 * s, py = H / 2 + y2 * s;
         i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
       }
       ctx.stroke();
@@ -268,6 +280,10 @@ export function createScenes(p) {
 
   return {
     get glOK() { return glOK; },
+    orbitBy(dx, dy) { view.yaw += dx * 0.008; view.pitch += dy * 0.008; view.vyaw = 0; view.vpitch = 0; },
+    orbitRelease(vx, vy) { view.vyaw = Math.max(-6, Math.min(6, vx * 0.008)); view.vpitch = Math.max(-6, Math.min(6, vy * 0.008)); },
+    zoomBy(dy) { view.zoom = Math.max(0.5, Math.min(2.2, view.zoom * Math.exp(-dy * 0.0012))); },
+    resetView() { Object.assign(view, { yaw: 0, pitch: 0.35, vyaw: 0, vpitch: 0, zoom: 1 }); },
     resize() { makeGL(); initSwarm(); initFlow(); },
     clear() { p.background(6, 5, 10); },
     /** f: {scene, b, coh, T, dt, hue, travel} */

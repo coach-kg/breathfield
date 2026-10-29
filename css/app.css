@@ -80,6 +80,7 @@ output { color: var(--ink); }
 
 .dock {
   position: absolute; left: 0; right: 0; bottom: 0;
+  align-items: stretch;
   padding-left: max(16px, env(safe-area-inset-left, 0px));
   padding-right: max(16px, env(safe-area-inset-right, 0px));
   padding-block: 14px calc(env(safe-area-inset-bottom, 0px) + 16px);
@@ -104,6 +105,15 @@ button[aria-pressed="true"] { background: var(--ink); color: var(--void); }
 .sel span { color: var(--mute); text-transform: uppercase; letter-spacing: 0.1em; font-size: 9.5px; padding-left: 12px; }
 select { text-transform: none; letter-spacing: 0.02em; padding-right: 10px; }
 select option { background: var(--void); color: var(--ink); }
+.ico { display: inline-grid; place-items: center; width: 38px; height: 34px; padding: 0; }
+.grp.icons .ico[aria-pressed="true"] { background: var(--ink); color: var(--void); }
+.sel .ico { border-left: 1px solid var(--line); height: 100%; }
+.sel > label { display: contents; }
+.sdot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--mute); margin-right: 8px; vertical-align: 1px; }
+.sdot[data-state="on"] { background: var(--high); }
+.sdot[data-state="warn"] { background: var(--low); }
+#stage.orbit canvas { cursor: grab; }
+#stage.orbit.grabbing canvas { cursor: grabbing; }
 .hint { flex: 1 1 100%; margin: 0; color: var(--mute); font-size: 10.5px; line-height: 1.6; max-width: 80ch; }
 kbd { font: inherit; color: var(--ink); border: 1px solid var(--line); padding: 1px 5px; }
 .spacer { flex: 1 1 auto; }

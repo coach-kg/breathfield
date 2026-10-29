@@ -281,7 +281,8 @@ function renderStatus() {
   el.textContent = dev ? dev.text || dev.label : 'No heart source';
   el.dataset.state = dev ? dev.state : 'off';
   const def = DEVICES.find((d) => d.id === app.deviceId);
-  $('sensorName').textContent = def ? def.short : 'none';
+  $('sensorName').textContent = def ? def.short : 'No sensor';
+  $('sensorDot').dataset.state = dev ? dev.state : 'off';
   if (!$('sensorPanel').hidden) renderDevices();
 }
 
@@ -548,7 +549,8 @@ function setPressed(groupSel, attr, val) {
 
 function setScene(i) {
   app.settings.scene = i;
-  setPressed('#scenes', 'scene', i);
+  $('sceneSel').value = String(i);
+  $('stage').classList.toggle('orbit', SCENES[i].id === 'lines');
   if (app.session) app.session.scenes.add(SCENES[i].id);
   scenes && scenes.clear();
   saveSettings();
@@ -575,11 +577,11 @@ function setPattern(i) {
   saveSettings();
 }
 
-$('scenes').innerHTML = SCENES.map((s, i) => `<button data-scene="${i}" aria-pressed="false">${s.name}</button>`).join('');
+$('sceneSel').innerHTML = SCENES.map((s, i) => `<option value="${i}">${s.name}</option>`).join('');
 $('pat').innerHTML = PATTERNS.map((p, i) => `<option value="${i}">${p.name}</option>`).join('');
 $('manualRank').innerHTML = RANKS.map((r, i) => `<option value="${i}">${r.name}</option>`).join('');
 
-$('scenes').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) setScene(+b.dataset.scene); });
+$('sceneSel').addEventListener('change', (e) => setScene(+e.target.value));
 $('pat').addEventListener('change', (e) => setPattern(+e.target.value));
 $('paceBtn').addEventListener('click', () => openPanel('pacePanel'));
 function onPaceInput() {
@@ -614,7 +616,9 @@ const GUIDE_LABELS = { full: 'Guide', numbers: 'Guide: seconds', none: 'Guide: q
 function applyGuide() {
   const { guideMode: m, guideStyle: s } = app.settings;
   const b = $('guide');
-  b.textContent = GUIDE_LABELS[m];
+  b.title = `${GUIDE_LABELS[m]} (G)`;
+  b.setAttribute('aria-label', GUIDE_LABELS[m]);
+  b.dataset.mode = m;
   b.setAttribute('aria-pressed', String(m !== 'off'));
   const ui = $('ui');
   ui.classList.toggle('noguide', m === 'off' || m === 'none');
@@ -765,10 +769,35 @@ new p5((p) => {
     scenes = createScenes(p);
     scenes.resize();
     scenes.clear();
-    if (!scenes.glOK) document.querySelectorAll('[data-scene="0"],[data-scene="1"]').forEach((b) => { b.disabled = true; });
-    c.elt.addEventListener('pointerdown', (e) => { e.preventDefault(); setHold(true); });
-    addEventListener('pointerup', () => { if (app.holding) setHold(false); });
-    addEventListener('pointercancel', () => setHold(false));
+    if (!scenes.glOK) document.querySelectorAll('#sceneSel option[value="0"],#sceneSel option[value="1"]').forEach((o) => { o.disabled = true; });
+    // Press and hold = breathing in (practice). In Lines, dragging turns the figure instead.
+    const drag = { on: false, moved: false, x: 0, y: 0, t: 0, vx: 0, vy: 0 };
+    const orbitable = () => SCENES[app.settings.scene].id === 'lines';
+    c.elt.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      Object.assign(drag, { on: true, moved: false, x: e.clientX, y: e.clientY, t: performance.now(), vx: 0, vy: 0 });
+      try { c.elt.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+      setHold(true);
+    });
+    c.elt.addEventListener('pointermove', (e) => {
+      if (!drag.on || !orbitable()) return;
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (!drag.moved && Math.hypot(dx, dy) < 6) return;
+      if (!drag.moved) { drag.moved = true; if (app.holding) setHold(false); $('stage').classList.add('grabbing'); }
+      const now = performance.now(), dt = Math.max(1, now - drag.t);
+      drag.vx = (dx / dt) * 1000; drag.vy = (dy / dt) * 1000;
+      scenes.orbitBy(dx, dy);
+      Object.assign(drag, { x: e.clientX, y: e.clientY, t: now });
+    });
+    const end = () => {
+      if (drag.on && drag.moved) scenes.orbitRelease(performance.now() - drag.t < 80 ? drag.vx : 0, performance.now() - drag.t < 80 ? drag.vy : 0);
+      drag.on = false; $('stage').classList.remove('grabbing');
+      if (app.holding) setHold(false);
+    };
+    addEventListener('pointerup', end);
+    addEventListener('pointercancel', end);
+    c.elt.addEventListener('wheel', (e) => { if (!orbitable()) return; e.preventDefault(); scenes.zoomBy(e.deltaY); }, { passive: false });
+    c.elt.addEventListener('dblclick', () => { if (orbitable()) scenes.resetView(); });
   };
   p.windowResized = () => {
     p.resizeCanvas(window.innerWidth, window.innerHeight);
