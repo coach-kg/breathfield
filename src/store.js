@@ -59,16 +59,38 @@ export async function deleteSession(id) {
   await req('sessions', 'readwrite', (s) => s.delete(id));
 }
 
+// Settings and level are also mirrored to localStorage, which writes instantly,
+// so a change survives even if the page closes before IndexedDB commits.
+const MIRRORED = new Set(['settings', 'level']);
+function mirrorRead(key) {
+  try { const m = JSON.parse(localStorage.getItem(`bf:${key}`)); return m && typeof m.at === 'number' ? m : null; } catch (e) { return null; }
+}
+function mirrorWrite(key, value, at) {
+  try { localStorage.setItem(`bf:${key}`, JSON.stringify({ at, v: value })); } catch (e) { /* storage blocked */ }
+}
+
 export async function get(key, fallback) {
   const db = await open();
-  const v = db ? await req('kv', 'readonly', (s) => s.get(key)) : memory.kv.get(key);
+  let v = db ? await req('kv', 'readonly', (s) => s.get(key)) : memory.kv.get(key);
+  if (MIRRORED.has(key)) {
+    const m = mirrorRead(key);
+    const at = (v && v.__at) || 0;
+    if (m && m.at > at) v = m.v;
+    if (v && typeof v === 'object') { v = { ...v }; delete v.__at; }
+  }
   return v === undefined ? fallback : v;
 }
 
 export async function set(key, value) {
+  let stored = value;
+  if (MIRRORED.has(key) && value && typeof value === 'object') {
+    const at = Date.now();
+    mirrorWrite(key, value, at);
+    stored = { ...value, __at: at };
+  }
   const db = await open();
-  if (!db) { memory.kv.set(key, value); return; }
-  await req('kv', 'readwrite', (s) => s.put(value, key));
+  if (!db) { memory.kv.set(key, stored); return; }
+  await req('kv', 'readwrite', (s) => s.put(stored, key));
 }
 
 // ---------- export / import ----------
