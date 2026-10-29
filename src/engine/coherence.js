@@ -19,6 +19,11 @@ export const N = WINDOW_SEC * FS;   // 128 samples, 1/64 Hz resolution
 export const PEAK_BAND = [0.04, 0.26];
 export const TOTAL_BAND = [0.0033, 0.4];
 export const PEAK_HALF_WIDTH = 0.015; // peak = ±0.015 Hz around the maximum
+// Sources that send heart rate only (watches) smooth it over several seconds,
+// which shrinks the breathing wave and leaves slow drifts on top. For them the
+// peak is looked for only near the pacer's rhythm, so the score says how much
+// your heart rate follows your breathing rather than how strong any slow wave is.
+export const APPROX_HALF_BAND = 0.02;
 
 const IBI_MIN = 300, IBI_MAX = 2000;  // 30–200 bpm
 
@@ -77,7 +82,7 @@ export function resample(beats, tEnd, n = N, fs = FS) {
 }
 
 /** Coherence of a tachogram window. Returns {ratio, score, peakHz, power}. */
-export function spectrumCoherence(samples, real, fs = FS) {
+export function spectrumCoherence(samples, real, fs = FS, band = PEAK_BAND) {
   const n = samples.length;
   const start = n - real;
   // Linear detrend over the real part, Hann window over the real part.
@@ -100,8 +105,8 @@ export function spectrumCoherence(samples, real, fs = FS) {
   for (let i = 0; i < n / 2; i++) power[i] = re[i] * re[i] + im[i] * im[i];
 
   const bin = (f) => Math.round(f / df);
-  let pk = bin(PEAK_BAND[0]);
-  for (let i = pk; i <= bin(PEAK_BAND[1]); i++) if (power[i] > power[pk]) pk = i;
+  let pk = bin(band[0]);
+  for (let i = pk; i <= bin(band[1]); i++) if (power[i] > power[pk]) pk = i;
   const hw = Math.max(1, Math.round(PEAK_HALF_WIDTH / df));
   let peak = 0, total = 0;
   for (let i = bin(TOTAL_BAND[0]); i <= bin(TOTAL_BAND[1]); i++) {
@@ -127,6 +132,7 @@ export class CoherenceEngine {
     this.latest = null;
     this.artifacts = 0;
     this.accepted = 0;
+    this.approx = false;      // heart-rate-only source: score around the pacer (see APPROX_HALF_BAND)
   }
 
   /** t: seconds (beat time), ibi: ms. Returns true if accepted. */
@@ -160,7 +166,7 @@ export class CoherenceEngine {
   }
 
   /** Returns a fresh result when one was computed this call, else null. */
-  update(now) {
+  update(now, paceHz = null) {
     if (now - this.lastCompute < STEP_SEC) return null;
     const usable = this.beats.filter((b) => b.t >= now - WINDOW_SEC);
     if (usable.length < 4 || now - usable[0].t < MIN_SEC) return null;
@@ -168,8 +174,9 @@ export class CoherenceEngine {
     if (now - usable[usable.length - 1].t > 4) return null;
     this.lastCompute = now;
     const { samples, real } = resample(usable, now, N, FS);
-    const r = spectrumCoherence(samples, real, FS);
-    this.latest = { t: now, score: r.score, ratio: r.ratio, peakHz: r.peakHz, hr: this.heartRate() };
+    const band = this.approx && paceHz ? [Math.max(PEAK_BAND[0], paceHz - APPROX_HALF_BAND), Math.min(PEAK_BAND[1], paceHz + APPROX_HALF_BAND)] : PEAK_BAND;
+    const r = spectrumCoherence(samples, real, FS, band);
+    this.latest = { t: now, score: r.score, ratio: r.ratio, peakHz: r.peakHz, hr: this.heartRate(), approx: this.approx };
     return this.latest;
   }
 }

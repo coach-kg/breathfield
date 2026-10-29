@@ -19,6 +19,20 @@ score = 100 × peak / total           0–100, shown in the app
 A score appears after 30 seconds of clean beats. Typical values in testing: a random rhythm
 scores 20–30, a faint breathing rhythm 50–65, and calm 6-per-minute breathing 85–98.
 
+**Heart-rate-only sources** (watches such as the Polar Unite) send a smoothed bpm once a second
+instead of beat intervals. In a recorded session the breathing swing shrank from about 25–30 bpm
+(emWave, same person) to about 7 bpm, and the strongest peak sat at half the breathing rate, from
+slow drifts. Scored the normal way, that session looked high half the time for the wrong reason.
+So for these sources the peak is only searched within ±0.02 Hz of the pacer: the score then
+measures how much your heart rate follows your breathing. Expect lower numbers than with a strap
+or the emWave; the session is marked `approx` in the journal.
+
+## Glow score
+
+`src/engine/glow.js`. Like the emWave's accumulated score: every 5-second update adds points for
+your zone. Default: high +2, medium +1, low −1 (never below zero). Settings offer "medium holds"
+or "low holds" instead. It resets with each session and is saved with it.
+
 ## Low, medium, high and ranks
 
 `src/engine/levels.js`. A difficulty `d` from 0 to 4 sets the thresholds:
@@ -60,9 +74,15 @@ Repeatable badges count how often you have done the thing: two separate week-lon
 
 ## Sound
 
-`src/audio.js`. No chimes. A low drone breathes with the pacer. As coherence rises, a fifth fades
+`src/audio.js`. A low drone breathes with the pacer. As coherence rises, a fifth fades
 in beneath it, then a soft major chord shimmers on top. Layers fade in over a few seconds and out
 even more slowly.
+
+Zone sounds (Settings → Sessions, off / soft / clearer, independent of the drone) are soft bells
+in the drone's key: a rising pair or rise of three when you move up a zone, a quiet falling pair
+when you move down, a warm chord after each minute held in high (one note in medium), and a high
+shimmer every 100 glow points. Wobbling across one edge sounds at most once every 12 seconds;
+climbing low → medium → high rings both steps. Low never gets a sound of its own.
 
 ## Journal file
 

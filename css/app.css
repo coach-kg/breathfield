@@ -190,7 +190,7 @@ h3 { margin: 10px 0 0; font-family: var(--f-display); font-weight: 300; font-siz
 #wave { width: 100%; height: 80px; border: 1px solid var(--line); }
 
 /* progress */
-.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.stats { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); }
 .stat { background: var(--void); padding: 12px; display: grid; gap: 4px; }
 .stat b { font-family: var(--f-display); font-weight: 300; font-size: 24px; font-variant-numeric: tabular-nums; }
 .stat span { color: var(--mute); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.1em; }
@@ -299,3 +299,6 @@ body.gaming #stage canvas { cursor: default; }
   body.gaming .brand { display: none; }
   .gamebar > b { display: none; }
 }
+
+.glowtrend[data-dir="up"] { color: var(--high); }
+.glowtrend[data-dir="down"] { color: var(--low); }
