@@ -6,7 +6,23 @@ export const PATTERNS = [
   { id: 'longout', name: '4 in · 6 out', note: 'longer exhale, calming', steps: [['in', 4], ['out', 6]] },
   { id: 'box', name: '4 · 4 · 4 · 4', note: 'box breathing', steps: [['in', 4], ['hold', 4], ['out', 4], ['hold', 4]] },
   { id: '478', name: '4 in · 7 hold · 8 out', note: 'for winding down', steps: [['in', 4], ['hold', 7], ['out', 8]] },
+  { id: 'custom', name: 'Custom', note: 'your own timing', steps: [['in', 5], ['out', 5]] },
 ];
+
+export const CUSTOM = PATTERNS.length - 1;
+const fmt = (x) => String(+x.toFixed(1));
+
+/** Set the custom pattern. Seconds: in, hold after in, out, hold after out. Zero holds are skipped. */
+export function setCustom({ inS = 5, holdIn = 0, outS = 5, holdOut = 0 } = {}) {
+  const steps = [['in', inS]];
+  if (holdIn > 0) steps.push(['hold', holdIn]);
+  steps.push(['out', outS]);
+  if (holdOut > 0) steps.push(['hold', holdOut]);
+  const p = PATTERNS[CUSTOM];
+  p.steps = steps;
+  p.name = `Custom · ${steps.map(([k, d]) => (k === 'hold' ? `${fmt(d)} hold` : `${fmt(d)} ${k}`)).join(' · ')}`;
+  return p;
+}
 
 export const cycleSec = (i) => PATTERNS[i].steps.reduce((s, x) => s + x[1], 0);
 export const perMinute = (i) => 60 / cycleSec(i);

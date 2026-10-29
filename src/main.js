@@ -1,4 +1,4 @@
-import { PATTERNS, breathAt, perMinute } from './engine/breath.js';
+import { PATTERNS, breathAt, perMinute, setCustom, CUSTOM } from './engine/breath.js';
 import { CoherenceEngine, STEP_SEC, MIN_SEC } from './engine/coherence.js';
 import { RANKS, thresholdsFor, zoneOf, visualLevel, initialLevelState, activeD, rankOf, adaptAfterSession, GREY, HOLD_SESSIONS } from './engine/levels.js';
 import { evaluate, gained } from './engine/achievements.js';
@@ -16,13 +16,22 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const COL = { low: css('--low'), mid: css('--mid'), high: css('--high') };
+function refreshColours() { COL.low = css('--low'); COL.mid = css('--mid'); COL.high = css('--high'); }
+const rgb = (hex) => { const h = hex.replace('#', ''); return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)); };
+/** Palette colour for a 0..1 level: low at 0, medium at 0.5, high at 1. */
+function levelColour(v) {
+  const [a, b, u] = v < 0.5 ? [COL.low, COL.mid, v / 0.5] : [COL.mid, COL.high, (v - 0.5) / 0.5];
+  const A = rgb(a), B = rgb(b);
+  return `rgb(${A.map((x, i) => Math.round(x + (B[i] - x) * u)).join(',')})`;
+}
 const ZONE_NAMES = ['low', 'medium', 'high'];
 const fmtClock = (s) => { s = Math.max(0, Math.floor(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const fmtMin = (m) => (m >= 90 ? `${(m / 60).toFixed(1)} h` : `${Math.round(m)} min`);
 const now = () => performance.now() / 1000;
 const motion = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.45 : 1;
 
-const DEFAULT_SETTINGS = { scene: 0, pattern: 0, guide: true, volume: 0.6, sessionMin: 10, rollover: 3, device: 'practice', colours: 'own' };
+const DEFAULT_SETTINGS = { scene: 0, pattern: 0, guide: true, volume: 0.6, sessionMin: 10, rollover: 3, device: 'practice', colours: 'own',
+  tint: 'soft', palette: 'classic', custom: { inS: 5, holdIn: 0, outS: 5, holdOut: 0 } };
 
 const app = {
   settings: { ...DEFAULT_SETTINGS },
@@ -146,6 +155,7 @@ function startSession() {
     demo: !!dev && dev.kind === 'demo',
     pattern: app.settings.pattern,
     patternId: PATTERNS[app.settings.pattern].id,
+    ...(app.settings.pattern === CUSTOM ? { customSteps: PATTERNS[CUSTOM].steps.map((x) => [...x]) } : {}),
     scenes: new Set([SCENES[app.settings.scene].id]),
     d: +activeD(app.level).toFixed(3),
     thresholds: thresholdsFor(activeD(app.level)),
@@ -175,7 +185,7 @@ async function endSession(auto = false) {
   const rec = {
     id: s.id, start: s.start, end: new Date().toISOString(), durationSec,
     device: s.device, deviceLabel: s.deviceLabel, sensor: s.sensor, demo: s.demo,
-    pattern: s.pattern, patternId: s.patternId, scenes: [...s.scenes],
+    pattern: s.pattern, patternId: s.patternId, ...(s.customSteps ? { customSteps: s.customSteps } : {}), scenes: [...s.scenes],
     d: s.d, thresholds: s.thresholds,
     timeIn: s.timeIn, avgScore: avg(s.scores.map((x) => x[1])), avgHr: avg(s.hrs),
     scores: s.scores, ibis: s.ibis, ...(s.emwave.length ? { emwave: s.emwave } : {}), endedBy: auto ? 'timer' : 'you',
@@ -322,6 +332,29 @@ function renderHud(br) {
   }
 }
 
+// Coherence colour over the scene: a hue tint plus brightness (dim when scattered, glow when coherent).
+let lastTint = '';
+function renderTint(level) {
+  const k = { off: 0, soft: 0.55, strong: 1 }[app.settings.tint] || 0;
+  const known = app.score != null || followEmwave();
+  const v = known ? level : 0.5;
+  const c = levelColour(v);
+  const key = `${k}|${c}|${v.toFixed(2)}`;
+  if (key === lastTint) return;
+  lastTint = key;
+  const tc = $('tintColor'), tg = $('tintGlow'), cv = document.querySelector('#stage canvas');
+  if (!k || !known) {
+    tc.style.opacity = '0'; tg.style.opacity = '0';
+    if (cv) cv.style.filter = '';
+    return;
+  }
+  tc.style.backgroundColor = c;
+  tc.style.opacity = (0.5 * k).toFixed(3);
+  tg.style.background = `radial-gradient(circle at 50% 50%, ${c} 0%, transparent 70%)`;
+  tg.style.opacity = (Math.max(0, v - 0.45) * 0.9 * k).toFixed(3);
+  if (cv) cv.style.filter = `brightness(${(1 - Math.max(0, 0.5 - v) * 1.1 * k).toFixed(3)})`;
+}
+
 function renderSecond() {
   $('score').textContent = app.score == null ? '—' : Math.round(app.score);
   if (app.score == null && app.device) {
@@ -463,6 +496,8 @@ async function renderSettings() {
   $('manualRank').value = String(app.level.manualRank);
   $('sessionMin').value = String(app.settings.sessionMin);
   $('colours').value = app.settings.colours;
+  $('tint').value = app.settings.tint;
+  $('palette').value = app.settings.palette;
   $('rollover').value = String(app.settings.rollover);
   $('volume').value = String(Math.round(app.settings.volume * 100));
   $('backupBtn').hidden = !store.canBackupToFile();
@@ -495,6 +530,19 @@ function setScene(i) {
   saveSettings();
 }
 
+function applyCustom() {
+  const c = app.settings.custom;
+  setCustom(c);
+  const opt = $('pat').querySelector(`option[value="${CUSTOM}"]`);
+  if (opt) opt.textContent = PATTERNS[CUSTOM].name;
+  for (const k of ['inS', 'holdIn', 'outS', 'holdOut']) {
+    $(k).value = String(c[k]);
+    $(`${k}V`).textContent = String(c[k]);
+  }
+  $('paceRate').textContent = perMinute(CUSTOM).toFixed(1);
+  if (app.settings.pattern === CUSTOM) $('rate').textContent = perMinute(CUSTOM).toFixed(1);
+}
+
 function setPattern(i) {
   app.settings.pattern = i;
   app.pacer0 = now();
@@ -509,6 +557,29 @@ $('manualRank').innerHTML = RANKS.map((r, i) => `<option value="${i}">${r.name}<
 
 $('scenes').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) setScene(+b.dataset.scene); });
 $('pat').addEventListener('change', (e) => setPattern(+e.target.value));
+$('paceBtn').addEventListener('click', () => openPanel('pacePanel'));
+function onPaceInput() {
+  app.settings.custom = { inS: +$('inS').value, holdIn: +$('holdIn').value, outS: +$('outS').value, holdOut: +$('holdOut').value };
+  applyCustom();
+  if (app.settings.pattern !== CUSTOM) setPattern(CUSTOM); else saveSettings();
+}
+['inS', 'holdIn', 'outS', 'holdOut'].forEach((k) => $(k).addEventListener('input', onPaceInput));
+$('pacePanel').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-preset]');
+  if (!b) return;
+  const [inS, holdIn, outS, holdOut] = b.dataset.preset.split(',').map(Number);
+  Object.assign(app.settings.custom, { inS, holdIn, outS, holdOut });
+  applyCustom();
+  onPaceInput();
+});
+function setPalette(v) {
+  app.settings.palette = v;
+  document.documentElement.dataset.palette = v;
+  refreshColours(); lastLvl = -1; lastTint = '';
+  saveSettings();
+}
+$('palette').addEventListener('change', (e) => { setPalette(e.target.value); renderJournal(); });
+$('tint').addEventListener('change', (e) => { app.settings.tint = e.target.value; lastTint = ''; saveSettings(); });
 $('sensorBtn').addEventListener('click', () => openPanel('sensorPanel'));
 $('journalBtn').addEventListener('click', () => openPanel('journalPanel'));
 $('sessionBtn').addEventListener('click', () => (app.session ? endSession() : startSession()));
@@ -574,14 +645,14 @@ $('backupBtn').addEventListener('click', async () => {
 });
 
 function openPanel(id) {
-  ['sensorPanel', 'journalPanel'].forEach((p) => { $(p).hidden = p !== id; });
+  ['sensorPanel', 'journalPanel', 'pacePanel'].forEach((p) => { $(p).hidden = p !== id; });
   ui.classList.remove('idle');
   if (id === 'sensorPanel') { renderDevices(); drawWave(); }
   if (id === 'journalPanel') renderJournal();
   const first = $(id).querySelector('button');
   first && first.focus();
 }
-function closePanels() { ['sensorPanel', 'journalPanel'].forEach((p) => { $(p).hidden = true; }); }
+function closePanels() { ['sensorPanel', 'journalPanel', 'pacePanel'].forEach((p) => { $(p).hidden = true; }); }
 document.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => { $(b.dataset.close).hidden = true; }));
 
 let toastTimer = 0;
@@ -595,7 +666,7 @@ function toast(msg) {
 // Fade the controls while you breathe.
 const ui = $('ui');
 let idleTimer = 0;
-const panelOpen = () => !$('sensorPanel').hidden || !$('journalPanel').hidden || !$('summary').hidden;
+const panelOpen = () => !$('sensorPanel').hidden || !$('journalPanel').hidden || !$('pacePanel').hidden || !$('summary').hidden;
 function poke() {
   ui.classList.remove('idle');
   clearTimeout(idleTimer);
@@ -624,6 +695,12 @@ addEventListener('keydown', (e) => {
   else if (e.key === 'h' || e.key === 'H') ui.classList.toggle('bare');
   else if (e.key === 'g' || e.key === 'G') $('guide').click();
   else if (e.key === 'f' || e.key === 'F') toggleFull();
+  else if (e.key === 'c' || e.key === 'C') {
+    const order = ['off', 'soft', 'strong'];
+    app.settings.tint = order[(order.indexOf(app.settings.tint) + 1) % 3];
+    lastTint = ''; saveSettings();
+    toast(`Coherence colour: ${app.settings.tint}`);
+  }
   else if (e.key === 'j' || e.key === 'J') ($('journalPanel').hidden ? openPanel('journalPanel') : closePanels());
 });
 addEventListener('keyup', (e) => { if (e.code === 'Space') { e.preventDefault(); setHold(false); } });
@@ -667,6 +744,7 @@ new p5((p) => {
     scenes.draw({ scene: app.settings.scene, b: br.b, coh: app.visual, T, dt: sdt, hue, travel });
     if (app.settings.guide) drawGuide(p, br, app.deviceId === 'practice' && app.holding);
     renderHud(br);
+    renderTint(app.visual);
     drone.update(br.b, app.score == null ? null : app.visual);
     if (app.session && app.settings.sessionMin && t - app.session.t0 >= app.settings.sessionMin * 60) endSession(true);
     secTimer += dt;
@@ -692,6 +770,9 @@ window.breathfield = { app, startSession, endSession, connect };
 
 (async function start() {
   await loadAll();
+  app.settings.custom = { ...DEFAULT_SETTINGS.custom, ...(app.settings.custom || {}) };
+  setPalette(app.settings.palette);
+  applyCustom();
   setScene(app.settings.scene);
   setPattern(app.settings.pattern);
   $('guide').setAttribute('aria-pressed', String(app.settings.guide));
