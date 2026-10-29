@@ -42,8 +42,16 @@
     <div id="cueSec">5</div>
   </div>
 
+  <div class="gamebar" id="gameBar" hidden>
+    <b id="gameTitle">Stillfall</b>
+    <button class="solo" id="gamePause" aria-pressed="false">Pause</button>
+    <button class="solo" id="gameExit">Leave game</button>
+  </div>
+  <button class="breathpad" id="breathPad" hidden aria-label="Hold while breathing in">hold<br>while<br>in</button>
+
   <footer class="dock" id="dock">
     <label class="sel" for="sceneSel"><span>Scene</span><select id="sceneSel"></select></label>
+    <button class="solo" id="playBtn" title="Games"><svg class="gpad" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8h10a4 4 0 0 1 4 4.5l-.6 3.6a2.2 2.2 0 0 1-3.9 1L15 15H9l-1.5 2.1a2.2 2.2 0 0 1-3.9-1L3 12.5A4 4 0 0 1 7 8z"/><path d="M8 11v3M6.5 12.5h3"/><circle cx="15.5" cy="11.5" r="0.6" fill="currentColor"/><circle cx="17" cy="13.5" r="0.6" fill="currentColor"/></svg><b id="playName">Play</b></button>
     <div class="sel" role="group" aria-label="Breathing">
       <label for="pat"><span>Breath</span></label><select id="pat"></select>
       <button class="ico" id="paceBtn" aria-label="Adjust pace" title="Adjust pace"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
@@ -74,6 +82,18 @@
       <div class="live-head"><span class="k">Beat intervals, last minute</span><span class="u" id="beatInfo">no beats yet</span></div>
       <canvas id="wave" width="760" height="160"></canvas>
     </div>
+  </div>
+</aside>
+
+<aside class="panel" id="gamesPanel" hidden aria-labelledby="gamesTitle">
+  <div class="panel-head">
+    <h2 id="gamesTitle">Games</h2>
+    <button class="x" data-close="gamesPanel" aria-label="Close">Close</button>
+  </div>
+  <div class="panel-body">
+    <p class="lede">Simple games where a coherent heart quietly helps: time slows, the light widens, the aim steadies. A scattered heart never makes a game harder than normal. Playing records a session, like breathing with a scene does.</p>
+    <div id="gameList" class="games"></div>
+    <p class="note">The current scene stays behind the game, dimmed (in full graphics). Your heart source and breathing pace stay as they are. With practice mode, hold Space while you breathe in, or on a phone the round pad in the corner.</p>
   </div>
 </aside>
 

@@ -8,6 +8,8 @@ import { Drone } from './audio.js';
 import { SCENES, createScenes, drawGuide, drawWaveGuide } from './visuals/scenes.js';
 const isPhone = matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 820;
 import { badgeGlyph } from './visuals/badges.js';
+import { GAMES, gameById } from './games/index.js';
+import { banner } from './games/common.js';
 import { PracticeKeys, DemoSensor } from './devices/simulated.js';
 import { BleHeartRate } from './devices/ble-hr.js';
 import { EmWaveHid } from './devices/emwave-hid.js';
@@ -20,11 +22,12 @@ const COL = { low: css('--low'), mid: css('--mid'), high: css('--high') };
 function refreshColours() { COL.low = css('--low'); COL.mid = css('--mid'); COL.high = css('--high'); }
 const rgb = (hex) => { const h = hex.replace('#', ''); return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)); };
 /** Palette colour for a 0..1 level: low at 0, medium at 0.5, high at 1. */
-function levelColour(v) {
+function levelRGB(v) {
   const [a, b, u] = v < 0.5 ? [COL.low, COL.mid, v / 0.5] : [COL.mid, COL.high, (v - 0.5) / 0.5];
   const A = rgb(a), B = rgb(b);
-  return `rgb(${A.map((x, i) => Math.round(x + (B[i] - x) * u)).join(',')})`;
+  return A.map((x, i) => Math.round(x + (B[i] - x) * Math.max(0, Math.min(1, u))));
 }
+function levelColour(v) { return `rgb(${levelRGB(v).join(',')})`; }
 const ZONE_NAMES = ['low', 'medium', 'high'];
 const fmtClock = (s) => { s = Math.max(0, Math.floor(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const fmtMin = (m) => (m >= 90 ? `${(m / 60).toFixed(1)} h` : `${Math.round(m)} min`);
@@ -55,6 +58,10 @@ const app = {
   session: null,
   flashes: [],
   emwave: null, // latest verdict from a connected emWave {zone, entrainment, level, achievement, t}
+  game: null, // { id, def, inst } while a game is open
+  gamePaused: false,
+  gameBest: {}, // { stillfall: { best, plays } }
+  touch: matchMedia('(pointer: coarse)').matches,
 };
 
 const followEmwave = () => app.settings.colours === 'emwave' && app.deviceId === 'emwave' && app.emwave && now() - app.emwave.t < 15;
@@ -213,6 +220,8 @@ function startSession() {
     ibis: [],
     ppg: [],
     emwave: [],
+    games: new Set(app.game ? [app.game.id] : []),
+    play: {},
   };
   const b = $('sessionBtn');
   b.textContent = 'End session'; b.classList.add('rec');
@@ -222,6 +231,7 @@ function startSession() {
 async function endSession(auto = false) {
   const s = app.session;
   if (!s) return;
+  if (app.game) recordGame();
   app.session = null;
   const b = $('sessionBtn');
   b.textContent = 'Start session'; b.classList.remove('rec');
@@ -237,7 +247,8 @@ async function endSession(auto = false) {
     pattern: s.pattern, patternId: s.patternId, ...(s.customSteps ? { customSteps: s.customSteps } : {}), scenes: [...s.scenes],
     d: s.d, thresholds: s.thresholds,
     timeIn: s.timeIn, avgScore: avg(s.scores.map((x) => x[1])), avgHr: avg(s.hrs),
-    scores: s.scores, ibis: s.ibis, ...(s.emwave.length ? { emwave: s.emwave } : {}), ...(s.ppg.length ? { ppg: s.ppg } : {}), endedBy: auto ? 'timer' : 'you',
+    scores: s.scores, ibis: s.ibis, ...(s.emwave.length ? { emwave: s.emwave } : {}), ...(s.ppg.length ? { ppg: s.ppg } : {}),
+    ...(s.games.size ? { games: [...s.games], play: s.play } : {}), endedBy: auto ? 'timer' : 'you',
   };
   if (rec.avgScore != null) rec.avgScore = +rec.avgScore.toFixed(1);
   if (rec.avgHr != null) rec.avgHr = +rec.avgHr.toFixed(1);
@@ -459,6 +470,7 @@ function renderSecond() {
   $('rankD').textContent = activeD(app.level).toFixed(1);
   drawSpark();
   if (!$('sensorPanel').hidden) drawWave();
+  updateBreathPad();
 }
 
 function drawSpark() {
@@ -604,7 +616,8 @@ function renderSessions() {
   $('tab-sessions').innerHTML = `<div class="slist">${list.map((s) => {
     const t = s.timeIn || [0, 0, 0], sum = t[0] + t[1] + t[2] || 1;
     const kind = s.demo ? 'demo' : s.sensor ? s.deviceLabel : 'practice';
-    return `<div class="srow"><div><div class="when">${fmt.format(new Date(s.start))}</div><div class="meta">${fmtClock(s.durationSec)} · ${esc(PATTERNS[s.pattern] ? PATTERNS[s.pattern].name : '')} · ${esc(kind)}</div></div>
+    const played = (s.games || []).map((id) => { const g = GAMES.find((x) => x.id === id); const sc = s.play && s.play[id] ? s.play[id].score : null; return `${g ? g.name : id}${sc != null ? ` ${sc}` : ''}`; }).join(', ');
+    return `<div class="srow"><div><div class="when">${fmt.format(new Date(s.start))}</div><div class="meta">${fmtClock(s.durationSec)} · ${esc(PATTERNS[s.pattern] ? PATTERNS[s.pattern].name : '')} · ${esc(kind)}${played ? ` · ${esc(played)}` : ''}</div></div>
       <div class="score">${s.avgScore == null ? '—' : Math.round(s.avgScore)}<div class="meta">avg</div></div>
       <div class="zonebar"><i style="width:${(100 * t[0]) / sum}%"></i><i style="width:${(100 * t[1]) / sum}%"></i><i style="width:${(100 * t[2]) / sum}%"></i></div></div>`;
   }).join('')}</div>`;
@@ -703,6 +716,122 @@ function setPalette(v) {
 $('palette').addEventListener('change', (e) => { setPalette(e.target.value); renderJournal(); });
 $('tint').addEventListener('change', (e) => { app.settings.coherenceTint = e.target.value; lastTint = ''; saveSettings(); });
 $('sensorBtn').addEventListener('click', () => openPanel('sensorPanel'));
+
+// ---------------------------------------------------------------- games
+// A game replaces the scene on the canvas (the scene stays behind it, dimmed,
+// in full graphics). It reads coherence and the breath, and records into the
+// running session; entering a game starts one if none is running.
+
+let padHeld = false;
+const gamePaused = () => app.gamePaused || panelOpen() || document.hidden;
+
+function renderGames() {
+  $('gameList').innerHTML = GAMES.map((g) => {
+    const b = app.gameBest[g.id];
+    const on = app.game && app.game.id === g.id;
+    const meta = g.soon ? 'soon' : on ? 'playing' : b && b.best ? `best ${b.best}` : '';
+    return `<button class="gcard${on ? ' on' : ''}" data-game="${g.id}" ${g.soon ? 'disabled' : ''}><span class="gi" aria-hidden="true">${g.glyph}</span><b>${esc(g.name)}</b><span class="best">${meta}</span><span class="d">${esc(g.blurb)}</span></button>`;
+  }).join('') + (app.game ? '<button class="solo" data-game="">Back to scenes</button>' : '');
+}
+$('gameList').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-game]');
+  if (!b) return;
+  closePanels();
+  if (b.dataset.game) enterGame(b.dataset.game); else leaveGame();
+});
+
+function enterGame(id) {
+  const def = gameById(id);
+  if (!def) return;
+  if (app.game) leaveGame(true);
+  app.game = { id, def, inst: def.create() };
+  app.gamePaused = false;
+  document.body.classList.add('gaming');
+  $('gameBar').hidden = false;
+  $('gameTitle').textContent = def.name;
+  $('gamePause').setAttribute('aria-pressed', 'false');
+  $('playName').textContent = def.name;
+  $('playBtn').classList.add('on');
+  updateBreathPad();
+  if (app.session) { app.session.games.add(id); toast(`${def.name}. Your session keeps recording.`); }
+  else { startSession(); app.session.games.add(id); toast(`${def.name}. Session started; it counts like any other.`); }
+  poke();
+}
+
+/** Keep the best score and add this game's numbers to the running session. */
+function recordGame() {
+  const g = app.game;
+  if (!g) return;
+  const st = g.inst.stats();
+  const prev = app.gameBest[g.id] || { best: 0, plays: 0 };
+  app.gameBest[g.id] = { best: Math.max(prev.best || 0, st.score || 0), plays: (prev.plays || 0) + (g.counted ? 0 : 1) };
+  g.counted = true;
+  store.set('games', app.gameBest).catch(() => {});
+  const s = app.session;
+  if (s) {
+    const old = s.play[g.id];
+    s.play[g.id] = !old || (st.score || 0) >= (old.score || 0) ? st : old;
+  }
+}
+
+function leaveGame(switching = false) {
+  if (!app.game) return;
+  recordGame();
+  app.game = null;
+  if (switching) return;
+  document.body.classList.remove('gaming');
+  $('gameBar').hidden = true;
+  $('playName').textContent = 'Play';
+  $('playBtn').classList.remove('on');
+  updateBreathPad();
+  scenes && scenes.clear();
+}
+
+function setGamePaused(v) {
+  app.gamePaused = v;
+  $('gamePause').setAttribute('aria-pressed', String(v));
+  $('gamePause').textContent = v ? 'Resume' : 'Pause';
+}
+
+function updateBreathPad() {
+  const show = !!app.game && app.deviceId === 'practice' && app.touch;
+  if ($('breathPad').hidden === show) $('breathPad').hidden = !show;
+}
+
+function drawGame(p, dt, br) {
+  const g = app.game;
+  const ctx = p.drawingContext;
+  const over = qualityNow === 'full';
+  if (over) {
+    scenes.draw({ scene: app.settings.scene, b: br.b, coh: app.visual, T, dt: dt * motion, hue, travel, hr: app.hrSmooth, hrv: app.hrv });
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+    ctx.fillStyle = 'rgba(6,5,10,0.8)';
+    ctx.fillRect(0, 0, p.width, p.height);
+    ctx.restore();
+  }
+  const paused = gamePaused();
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  ctx.setTransform(p.pixelDensity(), 0, 0, p.pixelDensity(), 0, 0);
+  const f = {
+    W: p.width, H: p.height, dt: Math.min(dt, 0.05), paused,
+    coh: app.visual, zone: shownZone(), b: br.b, br, hue, glowRGB: levelRGB(app.visual),
+    guide: app.settings.guideMode, overScene: over, touch: app.touch,
+    best: (app.gameBest[g.id] && app.gameBest[g.id].best) || 0, hr: app.hrSmooth, hrv: app.hrv,
+  };
+  g.inst.frame(ctx, f);
+  if (app.gamePaused) banner(ctx, f, 'paused', 'P or Esc to carry on');
+  ctx.restore();
+}
+
+$('playBtn').addEventListener('click', () => openPanel('gamesPanel'));
+$('gameExit').addEventListener('click', () => leaveGame());
+$('gamePause').addEventListener('click', () => setGamePaused(!app.gamePaused));
+const padOn = (e) => { e.preventDefault(); padHeld = true; $('breathPad').classList.add('on'); setHold(true); wake(); };
+const padOff = () => { if (!padHeld) return; padHeld = false; $('breathPad').classList.remove('on'); setHold(false); };
+$('breathPad').addEventListener('pointerdown', padOn);
+['pointerup', 'pointercancel', 'pointerleave'].forEach((t) => $('breathPad').addEventListener(t, padOff));
 
 // ---------------------------------------------------------------- tour
 const TOUR_SOURCES = [
@@ -840,15 +969,16 @@ function showTab(name) {
 }
 
 function openPanel(id, tab) {
-  ['sensorPanel', 'journalPanel', 'pacePanel'].forEach((p) => { $(p).hidden = p !== id; });
+  ['sensorPanel', 'journalPanel', 'pacePanel', 'gamesPanel'].forEach((p) => { $(p).hidden = p !== id; });
   if (tab) showTab(tab);
   ui.classList.remove('idle');
   if (id === 'sensorPanel') { renderDevices(); drawWave(); }
   if (id === 'journalPanel') renderJournal();
+  if (id === 'gamesPanel') renderGames();
   const first = $(id).querySelector('button');
   first && first.focus();
 }
-function closePanels() { ['sensorPanel', 'journalPanel', 'pacePanel'].forEach((p) => { $(p).hidden = true; }); }
+function closePanels() { ['sensorPanel', 'journalPanel', 'pacePanel', 'gamesPanel'].forEach((p) => { $(p).hidden = true; }); }
 document.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => { $(b.dataset.close).hidden = true; }));
 
 let toastTimer = 0;
@@ -862,7 +992,7 @@ function toast(msg) {
 // Fade the controls while you breathe.
 const ui = $('ui');
 let idleTimer = 0;
-const panelOpen = () => !$('sensorPanel').hidden || !$('journalPanel').hidden || !$('pacePanel').hidden || !$('summary').hidden || !$('tour').hidden;
+const panelOpen = () => !$('sensorPanel').hidden || !$('journalPanel').hidden || !$('pacePanel').hidden || !$('gamesPanel').hidden || !$('summary').hidden || !$('tour').hidden;
 function poke() {
   ui.classList.remove('idle');
   clearTimeout(idleTimer);
@@ -870,8 +1000,10 @@ function poke() {
     if (!panelOpen() && !$('dock').matches(':hover') && !$('dock').querySelector(':focus-visible')) ui.classList.add('idle');
   }, 3500);
 }
-addEventListener('pointermove', poke);
-addEventListener('pointerdown', () => { poke(); wake(); });
+// During a game, taps and moves on the canvas are play, not a request for the controls.
+const onCanvas = (e) => app.game && e.target && e.target.tagName === 'CANVAS';
+addEventListener('pointermove', (e) => { if (!onCanvas(e)) poke(); });
+addEventListener('pointerdown', (e) => { if (!onCanvas(e)) poke(); wake(); });
 
 function setHold(v) { app.holding = v; app.lastInput = now(); }
 function wake() { try { navigator.wakeLock && navigator.wakeLock.request('screen').catch(() => {}); } catch (e) { /* not allowed */ } }
@@ -879,12 +1011,23 @@ function wake() { try { navigator.wakeLock && navigator.wakeLock.request('screen
 addEventListener('keydown', (e) => {
   const tag = e.target.tagName;
   const typing = tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA';
-  poke();
+  if (!app.game || typing) poke();
   if (e.code === 'Space') {
     if (typing || tag === 'BUTTON') return;
     e.preventDefault(); if (!e.repeat) setHold(true); wake(); return;
   }
-  if (e.key === 'Escape') { closePanels(); $('summary').hidden = true; if (!$('tour').hidden) closeTour(); return; }
+  if (e.key === 'Escape') {
+    const had = panelOpen();
+    closePanels(); $('summary').hidden = true; if (!$('tour').hidden) closeTour();
+    if (!had && app.game) setGamePaused(!app.gamePaused);
+    return;
+  }
+  if (app.game && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    if (e.key === 'p' || e.key === 'P') { setGamePaused(!app.gamePaused); return; }
+    if (!gamePaused() && app.game.inst.key(e, true)) { e.preventDefault(); return; }
+    if (/^Arrow/.test(e.key)) { e.preventDefault(); return; }
+    poke();
+  }
   if (e.key === '?' ) { openTour(); return; }
   if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === 'Enter' && tag !== 'BUTTON') { app.session ? endSession() : startSession(); return; }
@@ -901,7 +1044,10 @@ addEventListener('keydown', (e) => {
   }
   else if (e.key === 'j' || e.key === 'J') ($('journalPanel').hidden ? openPanel('journalPanel') : closePanels());
 });
-addEventListener('keyup', (e) => { if (e.code === 'Space') { e.preventDefault(); setHold(false); } });
+addEventListener('keyup', (e) => {
+  if (e.code === 'Space') { e.preventDefault(); setHold(false); return; }
+  if (app.game) app.game.inst.key(e, false);
+});
 
 // ---------------------------------------------------------------- p5 loop
 
@@ -946,11 +1092,18 @@ new p5((p) => {
     const orbitable = () => SCENES[app.settings.scene].id === 'lines';
     c.elt.addEventListener('pointerdown', (e) => {
       e.preventDefault();
+      app.touch = e.pointerType !== 'mouse';
+      if (app.game) {
+        try { c.elt.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+        if (!gamePaused()) app.game.inst.pointer('down', e);
+        return;
+      }
       Object.assign(drag, { on: true, moved: false, x: e.clientX, y: e.clientY, t: performance.now(), vx: 0, vy: 0 });
       try { c.elt.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
       setHold(true);
     });
     c.elt.addEventListener('pointermove', (e) => {
+      if (app.game) { if (!gamePaused()) app.game.inst.pointer('move', e); return; }
       if (!drag.on || !orbitable()) return;
       const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
       if (!drag.moved && Math.hypot(dx, dy) < 6) return;
@@ -960,15 +1113,16 @@ new p5((p) => {
       scenes.orbitBy(dx, dy);
       Object.assign(drag, { x: e.clientX, y: e.clientY, t: now });
     });
-    const end = () => {
+    const end = (e) => {
+      if (app.game && e && e.target === c.elt) app.game.inst.pointer('up', e);
       if (drag.on && drag.moved) scenes.orbitRelease(performance.now() - drag.t < 80 ? drag.vx : 0, performance.now() - drag.t < 80 ? drag.vy : 0);
       drag.on = false; $('stage').classList.remove('grabbing');
-      if (app.holding) setHold(false);
+      if (app.holding && !padHeld) setHold(false);
     };
     addEventListener('pointerup', end);
     addEventListener('pointercancel', end);
-    c.elt.addEventListener('wheel', (e) => { if (!orbitable()) return; e.preventDefault(); scenes.zoomBy(e.deltaY); }, { passive: false });
-    c.elt.addEventListener('dblclick', () => { if (orbitable()) scenes.resetView(); });
+    c.elt.addEventListener('wheel', (e) => { if (app.game || !orbitable()) return; e.preventDefault(); scenes.zoomBy(e.deltaY); }, { passive: false });
+    c.elt.addEventListener('dblclick', () => { if (!app.game && orbitable()) scenes.resetView(); });
   };
   p.windowResized = () => {
     p.resizeCanvas(window.innerWidth, window.innerHeight);
@@ -989,8 +1143,9 @@ new p5((p) => {
     app.visual += (target - app.visual) * Math.min(1, dt * 0.6);
     hue += sdt * (0.006 + 0.02 * (1 - app.visual));
     travel += sdt * (0.2 + 0.55 * br.b);
-    scenes.draw({ scene: app.settings.scene, b: br.b, coh: app.visual, T, dt: sdt, hue, travel, hr: app.hrSmooth, hrv: app.hrv });
-    if (app.settings.guideMode !== 'off') {
+    if (app.game) drawGame(p, dt, br);
+    else scenes.draw({ scene: app.settings.scene, b: br.b, coh: app.visual, T, dt: sdt, hue, travel, hr: app.hrSmooth, hrv: app.hrv });
+    if (!app.game && app.settings.guideMode !== 'off') {
       const active = app.deviceId === 'practice' && app.holding;
       if (app.settings.guideStyle === 'wave') {
         const pat = app.settings.pattern;
@@ -1015,6 +1170,7 @@ async function loadAll() {
     app.settings = { ...DEFAULT_SETTINGS, ...(await store.get('settings', {})) };
     app.level = { ...initialLevelState(), ...(await store.get('level', {})) };
     app.sessions = await store.allSessions();
+    app.gameBest = await store.get('games', {}) || {};
   } catch (e) { /* first run or storage blocked */ }
   drone.volume = app.settings.volume;
   app.badges = evaluateBadges();
@@ -1022,7 +1178,7 @@ async function loadAll() {
 }
 
 // Handy from the browser console, e.g. breathfield.app.level
-window.breathfield = { app, startSession, endSession, connect };
+window.breathfield = { app, startSession, endSession, connect, enterGame, leaveGame };
 
 (async function start() {
   await loadAll();

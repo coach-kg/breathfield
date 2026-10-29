@@ -37,7 +37,7 @@ How the emWave's USB data is decoded: [docs/DEVICES.md](docs/DEVICES.md).
 ## Keys
 
 `Space` hold while breathing in · `Enter` start or end a session · `1`–`7` scenes ·
-`C` coherence colour · `,` settings · `J` journal · `G` pacer ring · `H` hide everything · `F` fullscreen · `Esc` close panels
+`C` coherence colour · `P` pause a game · `,` settings · `J` journal · `G` pacer ring · `H` hide everything · `F` fullscreen · `Esc` close panels
 
 ## Your data
 
@@ -47,10 +47,11 @@ that Breathfield keeps updated after every session. Nothing is uploaded anywhere
 
 How coherence, the adaptive ranks and the badges work: [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md).
 
-## Coming maybe: minigames
+## Games
 
-Tetris where a calm heart slows time, a glider riding the breathing wave, a lantern platformer
-where coherence lights the way. Sketches and ground rules: [docs/GAMES.md](docs/GAMES.md).
+Press **Play** for five small games where a coherent heart quietly helps: Stillfall (falling
+blocks, time slows when you're calm), Slow Snake, Lantern (a night platformer where coherence is
+your light), Cairn (stone stacking) and Bow (archery). Controls and ideas: [docs/GAMES.md](docs/GAMES.md).
 
 ## Photosensitivity
 

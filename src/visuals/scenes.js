@@ -320,7 +320,18 @@ export function createScenes(p) {
     const v0 = [sq[0].x + sq[0].s / 2 - ex, sq[0].y + sq[0].s / 2 - ey];
     const v1 = [sq[1].x + sq[1].s / 2 - ex, sq[1].y + sq[1].s / 2 - ey];
     const turn = Math.atan2(v1[1], v1[0]) - Math.atan2(v0[1], v0[0]); // one step inward turns by this
-    return { sq, ex, ey, turn };
+    // A small golden spiral nested in square 0, relative to the eye. Square k is
+    // square 0 shrunk by φ^k and turned by k·turn, so the same move places it in
+    // any square and it stays put when the zoom wraps round.
+    const q = sq[0], sc = q.s / PHI, nest = [];
+    for (let j = 0; j < 9; j++) {
+      const r = sq[j];
+      for (let i = 0; i <= 10; i++) {
+        const a = r.a0 + ((r.a1 - r.a0) * i) / 10;
+        nest.push([q.x + (r.cx + Math.cos(a) * r.s) * sc * 0.98 + q.s * 0.01 - ex, q.y + (r.cy + Math.sin(a) * r.s) * sc * 0.98 + q.s * 0.2 - ey]);
+      }
+    }
+    return { sq, ex, ey, turn, nest };
   })();
   const gs = { T: 0, jit: 0 };
   function golden(f) {
@@ -333,17 +344,23 @@ export function createScenes(p) {
     gs.T += f.dt * (0.05 + 0.22 * f.b);
     const fr = gs.T % 1, layer = Math.floor(gs.T);
     const unit = md * 0.55 * Math.pow(PHI, fr) * Math.pow(PHI, 6); // start ~6 squares outside the screen
-    const rotZoom = -GS.turn * fr + f.T * 0.02;
+    // A mirror image turns the other way as it zooms, so each arm gets its own turn.
+    const spin = f.T * 0.02;
     const arms = 3;
     ctx.lineCap = 'round';
     ctx.globalCompositeOperation = 'lighter';
     // Colour split when scattered: three passes nudged apart.
+    // Fades in smoothly instead of switching on.
     const split = chaos * chaos * md * 0.012;
-    const passes = split > 0.6 ? [[split, 0, '255,90,90'], [-split, 0, '90,200,255'], [0, split, '140,255,160']] : [[0, 0, null]];
-    for (const [ox, oy, tintRGB] of passes) {
+    const wSplit = Math.max(0, Math.min(1, (split - 0.4) / 0.6));
+    const passes = [];
+    if (wSplit < 1) passes.push([0, 0, null, 1 - wSplit]);
+    if (wSplit > 0) passes.push([split, 0, '255,90,90', wSplit], [-split, 0, '90,200,255', wSplit], [0, split, '140,255,160', wSplit]);
+    for (const [ox, oy, tintRGB, wPass] of passes) {
       for (let arm = 0; arm < arms * 2; arm++) {
         const mirror = arm >= arms ? -1 : 1;
         const armAng = ((arm % arms) / arms) * TAU + chaos * 0.6 * (p.noise(arm * 7.1, f.T * 0.1) - 0.5);
+        const rotZoom = -mirror * GS.turn * fr + spin;
         const ca = Math.cos(rotZoom + armAng), sa = Math.sin(rotZoom + armAng);
         const P = (u, v) => {
           const X = (u - GS.ex) * unit, Y = (v - GS.ey) * unit * mirror;
@@ -356,7 +373,7 @@ export function createScenes(p) {
           if (size > md * 4) continue;
           const depth = k + layer;
           const hue = ((f.hue + depth * 0.045 + (arm % arms) * 0.09) % 1) * 360;
-          const alphaBase = (mirror < 0 ? 0.3 : 1) * (0.35 + 0.6 * coh) * Math.min(1, size / 30);
+          const alphaBase = wPass * (mirror < 0 ? 0.3 : 1) * (0.35 + 0.6 * coh) * Math.min(1, size / 30);
           ctx.strokeStyle = tintRGB ? `rgba(${tintRGB},${(alphaBase * 0.5).toFixed(3)})` : `hsla(${hue.toFixed(0)},${(45 + 50 * coh).toFixed(0)}%,${(60 + 12 * coh).toFixed(0)}%,${alphaBase.toFixed(3)})`;
           ctx.lineWidth = Math.max(0.7, Math.min(4.5, size * 0.009)) * (0.8 + 0.5 * f.b);
           // The arc, as a polyline so it can wobble when scattered.
@@ -376,20 +393,16 @@ export function createScenes(p) {
             const c1 = P(q.x, q.y), c2 = P(q.x + q.s, q.y), c3 = P(q.x + q.s, q.y + q.s), c4 = P(q.x, q.y + q.s);
             ctx.beginPath(); ctx.moveTo(...c1); ctx.lineTo(...c2); ctx.lineTo(...c3); ctx.lineTo(...c4); ctx.closePath(); ctx.stroke();
             // Fractal echo: a small golden spiral nested inside mid-sized squares.
-            if (coh > 0.4 && size > 60 && size < md * 0.9 && Q.blur) {
-              ctx.strokeStyle = `hsla(${((hue + 140) % 360).toFixed(0)},75%,75%,${((coh - 0.4) * 0.55).toFixed(3)})`;
+            // It fades in as a square grows past ~40 px and out as it fills the screen.
+            const nestA = (coh - 0.4) * 0.55 * Math.min(1, Math.max(0, (size - 40) / 60)) * Math.min(1, Math.max(0, (md * 1.3 - size) / (md * 0.5)));
+            if (nestA > 0.004 && Q.blur) {
+              ctx.strokeStyle = `hsla(${((hue + 140) % 360).toFixed(0)},75%,75%,${nestA.toFixed(3)})`;
               ctx.beginPath();
-              for (let j = 0; j < 9; j++) {
-                const r = GS.sq[j];
-                const sc = q.s / PHI; // the nested spiral fills the square
-                for (let i = 0; i <= 10; i++) {
-                  const a = r.a0 + ((r.a1 - r.a0) * i) / 10;
-                  const u = q.x + (r.cx + Math.cos(a) * r.s) * sc * 0.98 + q.s * 0.01;
-                  const v = q.y + (r.cy + Math.sin(a) * r.s) * sc * 0.98 + q.s * 0.2;
-                  const [px, py] = P(u, v);
-                  (i || j) ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
-                }
-              }
+              const kc = Math.cos(k * GS.turn), ks = Math.sin(k * GS.turn), kk = Math.pow(PHI, -k);
+              GS.nest.forEach(([nx, ny], i) => {
+                const [px, py] = P(GS.ex + (nx * kc - ny * ks) * kk, GS.ey + (nx * ks + ny * kc) * kk);
+                i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+              });
               ctx.stroke();
             }
           }
@@ -398,7 +411,7 @@ export function createScenes(p) {
     }
     // The eye: a glow where every spiral converges.
     const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, md * (0.05 + 0.05 * f.b));
-    g.addColorStop(0, `hsla(${((f.hue + layer * 0.045) % 1 * 360).toFixed(0)},80%,85%,${(0.3 + 0.4 * coh).toFixed(3)})`);
+    g.addColorStop(0, `hsla(${((f.hue + gs.T * 0.045) % 1 * 360).toFixed(0)},80%,85%,${(0.3 + 0.4 * coh).toFixed(3)})`);
     g.addColorStop(1, 'hsla(0,0%,0%,0)');
     ctx.fillStyle = g;
     ctx.fillRect(cx - md * 0.1, cy - md * 0.1, md * 0.2, md * 0.2);

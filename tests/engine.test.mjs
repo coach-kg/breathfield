@@ -175,3 +175,22 @@ test('decodes real emWave 2 packets into beats, 2 Hz samples and status', async 
   assert.deepEqual(status[0], { type: 'status', level: 1, time: 295, zone: 2, achievement: 43, entrainment: 222 });
   assert.equal(msgs.filter((m) => m.type === 'unknown').length, 0);
 });
+
+// ---------------------------------------------------------------- games
+import { helpOf } from '../src/games/common.js';
+import { fallInterval, timeScale } from '../src/games/stillfall.js';
+import { snakeSpeed } from '../src/games/snake.js';
+
+test('games: coherence only ever helps', () => {
+  assert.equal(helpOf(0), 0);
+  assert.equal(helpOf(1), 1);
+  let prev = Infinity;
+  for (let c = 0; c <= 1.0001; c += 0.05) {
+    const ts = timeScale(c);
+    assert.ok(ts <= 1 && ts >= 0.5, `time scale ${ts}`);
+    assert.ok(ts <= prev + 1e-9, 'never faster when more coherent');
+    prev = ts;
+    assert.ok(snakeSpeed(10, c) <= snakeSpeed(10, 0) + 1e-9);
+  }
+  assert.ok(fallInterval(5) < fallInterval(1));
+});
