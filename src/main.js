@@ -31,7 +31,7 @@ const now = () => performance.now() / 1000;
 const motion = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.45 : 1;
 
 const DEFAULT_SETTINGS = { scene: 0, pattern: 0, guide: true, volume: 0.6, sessionMin: 10, rollover: 3, device: 'practice', colours: 'own',
-  tintMode: 'off', palette: 'classic', custom: { inS: 5, holdIn: 0, outS: 5, holdOut: 0 } };
+  coherenceTint: 'soft', palette: 'classic', custom: { inS: 5, holdIn: 0, outS: 5, holdOut: 0 } };
 
 const app = {
   settings: { ...DEFAULT_SETTINGS },
@@ -213,7 +213,7 @@ async function endSession(auto = false) {
 }
 
 function evaluateBadges() {
-  return evaluate(app.sessions, app.level, { rollover: app.settings.rollover, patternCount: PATTERNS.length });
+  return evaluate(app.sessions, app.level, { rollover: app.settings.rollover, patternCount: PATTERNS.length, sceneCount: SCENES.length });
 }
 
 /** "The emWave said: high 80% · medium 15% · low 5%" for sessions recorded with it. */
@@ -341,7 +341,7 @@ function renderHud(br) {
 // Coherence colour over the scene: a hue tint plus brightness (dim when scattered, glow when coherent).
 let lastTint = '';
 function renderTint(level) {
-  const k = { off: 0, soft: 0.55, strong: 1 }[app.settings.tintMode] || 0;
+  const k = { off: 0, soft: 0.55, strong: 1 }[app.settings.coherenceTint] || 0;
   const known = app.score != null || followEmwave();
   const v = known ? level : 0.5;
   const c = levelColour(v);
@@ -361,7 +361,21 @@ function renderTint(level) {
   if (cv) cv.style.filter = `brightness(${(1 - Math.max(0, 0.5 - v) * 1.1 * k).toFixed(3)})`;
 }
 
+/** Smoothed heart rate and RMSSD over the last 30 clean beats, for the scenes. */
+function updateHeartState() {
+  const hr = app.engine.heartRate();
+  if (hr) app.hrSmooth = app.hrSmooth ? app.hrSmooth + (hr - app.hrSmooth) * 0.25 : hr;
+  const b = app.beats.filter((x) => x.ok).slice(-31).map((x) => x.ibi);
+  if (b.length > 5) {
+    let s = 0;
+    for (let i = 1; i < b.length; i++) s += (b[i] - b[i - 1]) ** 2;
+    const rmssd = Math.sqrt(s / (b.length - 1));
+    app.hrv = app.hrv ? app.hrv + (rmssd - app.hrv) * 0.25 : rmssd;
+  }
+}
+
 function renderSecond() {
+  updateHeartState();
   // A sensor that stops sending beats should not leave an old score on screen.
   const lastBeat = app.beats.length ? app.beats[app.beats.length - 1].t : null;
   if (app.score != null && app.device && (lastBeat == null || now() - lastBeat > 8)) { app.score = null; app.zone = null; }
@@ -505,7 +519,7 @@ async function renderSettings() {
   $('manualRank').value = String(app.level.manualRank);
   $('sessionMin').value = String(app.settings.sessionMin);
   $('colours').value = app.settings.colours;
-  $('tint').value = app.settings.tintMode;
+  $('tint').value = app.settings.coherenceTint;
   $('palette').value = app.settings.palette;
   $('rollover').value = String(app.settings.rollover);
   $('volume').value = String(Math.round(app.settings.volume * 100));
@@ -588,9 +602,10 @@ function setPalette(v) {
   saveSettings();
 }
 $('palette').addEventListener('change', (e) => { setPalette(e.target.value); renderJournal(); });
-$('tint').addEventListener('change', (e) => { app.settings.tintMode = e.target.value; lastTint = ''; saveSettings(); });
+$('tint').addEventListener('change', (e) => { app.settings.coherenceTint = e.target.value; lastTint = ''; saveSettings(); });
 $('sensorBtn').addEventListener('click', () => openPanel('sensorPanel'));
-$('journalBtn').addEventListener('click', () => openPanel('journalPanel'));
+$('journalBtn').addEventListener('click', () => openPanel('journalPanel', 'progress'));
+$('settingsBtn').addEventListener('click', () => openPanel('journalPanel', 'settings'));
 $('sessionBtn').addEventListener('click', () => (app.session ? endSession() : startSession()));
 $('guide').addEventListener('click', () => {
   app.settings.guide = !app.settings.guide;
@@ -653,8 +668,14 @@ $('backupBtn').addEventListener('click', async () => {
   renderSettings();
 });
 
-function openPanel(id) {
+function showTab(name) {
+  document.querySelectorAll('#tabs [data-tab]').forEach((x) => x.setAttribute('aria-selected', String(x.dataset.tab === name)));
+  document.querySelectorAll('.tab').forEach((t) => { t.hidden = t.id !== `tab-${name}`; });
+}
+
+function openPanel(id, tab) {
   ['sensorPanel', 'journalPanel', 'pacePanel'].forEach((p) => { $(p).hidden = p !== id; });
+  if (tab) showTab(tab);
   ui.classList.remove('idle');
   if (id === 'sensorPanel') { renderDevices(); drawWave(); }
   if (id === 'journalPanel') renderJournal();
@@ -700,15 +721,16 @@ addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { closePanels(); $('summary').hidden = true; return; }
   if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === 'Enter' && tag !== 'BUTTON') { app.session ? endSession() : startSession(); return; }
-  if (e.key >= '1' && e.key <= '4') setScene(+e.key - 1);
+  if (e.key >= '1' && e.key <= String(SCENES.length)) setScene(+e.key - 1);
+  else if (e.key === ',') openPanel('journalPanel', 'settings');
   else if (e.key === 'h' || e.key === 'H') ui.classList.toggle('bare');
   else if (e.key === 'g' || e.key === 'G') $('guide').click();
   else if (e.key === 'f' || e.key === 'F') toggleFull();
   else if (e.key === 'c' || e.key === 'C') {
     const order = ['off', 'soft', 'strong'];
-    app.settings.tintMode = order[(order.indexOf(app.settings.tintMode) + 1) % 3];
+    app.settings.coherenceTint = order[(order.indexOf(app.settings.coherenceTint) + 1) % 3];
     lastTint = ''; saveSettings();
-    toast(`Coherence colour: ${app.settings.tintMode}`);
+    toast(`Coherence colour: ${app.settings.coherenceTint}`);
   }
   else if (e.key === 'j' || e.key === 'J') ($('journalPanel').hidden ? openPanel('journalPanel') : closePanels());
 });
@@ -750,7 +772,7 @@ new p5((p) => {
     app.visual += (target - app.visual) * Math.min(1, dt * 0.6);
     hue += sdt * (0.006 + 0.02 * (1 - app.visual));
     travel += sdt * (0.2 + 0.55 * br.b);
-    scenes.draw({ scene: app.settings.scene, b: br.b, coh: app.visual, T, dt: sdt, hue, travel });
+    scenes.draw({ scene: app.settings.scene, b: br.b, coh: app.visual, T, dt: sdt, hue, travel, hr: app.hrSmooth, hrv: app.hrv });
     if (app.settings.guide) drawGuide(p, br, app.deviceId === 'practice' && app.holding);
     renderHud(br);
     renderTint(app.visual);

@@ -1,6 +1,9 @@
-// The four rooms. Each scene draws one frame from:
+// The rooms. Each scene draws one frame from:
 //   b    breath 0 (empty) … 1 (full) from the pacer
 //   coh  coherence 0 (scattered) … 1 (ordered), already smoothed
+//   hr   heart rate (bpm, smoothed), hrv beat-to-beat variability (RMSSD, ms)
+// Nothing fires on single heartbeats: the scenes follow breath and the slow
+// state of the heart, which is calmer to watch and kinder to sensitive eyes.
 // Low coherence looks restless and greyed, high coherence symmetric and lit.
 
 export const SCENES = [
@@ -8,6 +11,8 @@ export const SCENES = [
   { id: 'tunnel', name: 'Tunnel' },
   { id: 'swarm', name: 'Swarm' },
   { id: 'moire', name: 'Moiré' },
+  { id: 'lines', name: 'Lines' },
+  { id: 'flow', name: 'Flow' },
 ];
 
 const TAU = Math.PI * 2;
@@ -171,9 +176,99 @@ export function createScenes(p) {
     }
   }
 
+  // Lines: a harmonograph. Its frequencies come from your heart rate (72 bpm
+  // gives 7.2) and its modulation from your variability. Coherence pulls the
+  // frequencies onto whole numbers, so the figure closes into a clean,
+  // symmetric knot; when scattered they drift between whole numbers, the curve
+  // stays open and the strands smear apart into a soft blur.
+  const ln = { fy: 7, mx: 2, phi: 0, rot: 0 };
+  function lines(f) {
+    const ctx = p.drawingContext, W = p.width, H = p.height, md = Math.min(W, H);
+    const coh = f.coh, chaos = 1 - coh;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = `rgba(6,5,10,${0.1 + 0.3 * coh})`;
+    ctx.fillRect(0, 0, W, H);
+    const k = Math.min(1, f.dt * 0.35);
+    const rawY = Math.max(4, Math.min(13, (f.hr || 66) / 10));
+    const rawM = 1 + Math.max(0, Math.min(4, (f.hrv || 30) / 15));
+    const snap = (v) => v + (Math.round(v) - v) * Math.min(1, coh * 1.15);
+    ln.fy += (snap(rawY) - ln.fy) * k;
+    ln.mx += (snap(rawM) - ln.mx) * k;
+    ln.phi += f.dt * (0.04 + 0.1 * chaos);
+    ln.rot += f.dt * 0.01;
+    const R = md * 0.34 * (0.8 + 0.2 * f.b);
+    const layers = 5, N = 1100;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineJoin = 'round';
+    const cr = Math.cos(ln.rot), sr = Math.sin(ln.rot);
+    for (let L = 0; L < layers; L++) {
+      const off = (L - (layers - 1) / 2) * (0.004 + 0.06 * chaos);
+      const hue = (f.hue * 360 + L * (6 + 20 * chaos)) % 360;
+      const col = `hsla(${hue.toFixed(0)},${(35 + 55 * coh).toFixed(0)}%,${(58 + 14 * coh).toFixed(0)}%,${(0.14 + 0.3 * coh).toFixed(3)})`;
+      ctx.strokeStyle = col;
+      ctx.shadowColor = col;
+      ctx.shadowBlur = 2 + 16 * chaos;
+      ctx.lineWidth = 0.8 + 1.4 * coh;
+      ctx.beginPath();
+      for (let i = 0; i <= N; i++) {
+        const a = (i / N) * TAU;
+        const x = Math.sin(a * ln.fy + ln.phi + off) * Math.cos(a + off * 3);
+        const y = Math.sin(a * (ln.fy - 1) + off * 2) * Math.cos(a * ln.mx);
+        const jx = chaos * md * 0.012 * (p.noise(i * 0.03, L * 3.1, f.T * 0.25) - 0.5);
+        const jy = chaos * md * 0.012 * (p.noise(i * 0.03 + 40, L * 3.1, f.T * 0.25) - 0.5);
+        const X = x * R * 1.25 + jx, Y = y * R + jy;
+        const px = W / 2 + X * cr - Y * sr, py = H / 2 + X * sr + Y * cr;
+        i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+      }
+      ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
+  }
+
+  // Flow: thousands of drifting threads in a noise field. Scattered, the
+  // field is turbulent and the threads tangle; coherent, they fall into one
+  // slow vortex around the centre. Breath sets the speed.
+  const fl = { n: 0 };
+  function initFlow() {
+    const n = p.width * p.height > 1.2e6 ? 2600 : 1600;
+    fl.n = n;
+    fl.x = new Float32Array(n); fl.y = new Float32Array(n); fl.s = new Float32Array(n);
+    for (let i = 0; i < n; i++) { fl.x[i] = Math.random() * p.width; fl.y[i] = Math.random() * p.height; fl.s[i] = 0.5 + Math.random(); }
+  }
+  function flow(f) {
+    const ctx = p.drawingContext, W = p.width, H = p.height, cx = W / 2, cy = H / 2, md = Math.min(W, H);
+    const coh = f.coh, chaos = 1 - coh;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = `rgba(6,5,10,${0.035 + 0.04 * chaos})`;
+    ctx.fillRect(0, 0, W, H);
+    const scale = md * (0.22 + 0.25 * coh);
+    const speed = (0.5 + 1.6 * f.b) * (60 * f.dt);
+    const buckets = 5;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineWidth = 0.6 + 0.6 * coh;
+    const paths = Array.from({ length: buckets }, () => new Path2D());
+    for (let i = 0; i < fl.n; i++) {
+      const x = fl.x[i], y = fl.y[i];
+      const na = p.noise(x / scale, y / scale, f.T * 0.04) * TAU * (1.5 + 2 * chaos);
+      const dx = x - cx, dy = y - cy, r = Math.hypot(dx, dy) + 1;
+      const ta = Math.atan2(dy, dx) + Math.PI / 2 + 0.25 * (r / md - 0.35);
+      const w = coh * coh;
+      const vx = Math.cos(na) * (1 - w) + Math.cos(ta) * w, vy = Math.sin(na) * (1 - w) + Math.sin(ta) * w;
+      const nx = x + vx * speed * fl.s[i], ny = y + vy * speed * fl.s[i];
+      const path = paths[i % buckets];
+      path.moveTo(x, y); path.lineTo(nx, ny);
+      if (nx < 0 || nx > W || ny < 0 || ny > H || Math.random() < 0.002) { fl.x[i] = Math.random() * W; fl.y[i] = Math.random() * H; }
+      else { fl.x[i] = nx; fl.y[i] = ny; }
+    }
+    for (let j = 0; j < buckets; j++) {
+      ctx.strokeStyle = `hsla(${((f.hue * 360 + j * (10 + 26 * chaos)) % 360).toFixed(0)},${(40 + 50 * coh).toFixed(0)}%,62%,${(0.22 + 0.25 * f.b).toFixed(3)})`;
+      ctx.stroke(paths[j]);
+    }
+  }
+
   return {
     get glOK() { return glOK; },
-    resize() { makeGL(); initSwarm(); },
+    resize() { makeGL(); initSwarm(); initFlow(); },
     clear() { p.background(6, 5, 10); },
     /** f: {scene, b, coh, T, dt, hue, travel} */
     draw(f) {
@@ -182,7 +277,9 @@ export function createScenes(p) {
       if (s === 0) shader(shM, f);
       else if (s === 1) shader(shT, f);
       else if (s === 2) swarm(f);
-      else moire(f);
+      else if (s === 3) moire(f);
+      else if (s === 4) lines(f);
+      else flow(f);
     },
   };
 }

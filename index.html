@@ -49,10 +49,11 @@
     <span class="spacer"></span>
     <button class="solo primary" id="sessionBtn">Start session</button>
     <button class="solo" id="journalBtn">Journal</button>
+    <button class="solo" id="settingsBtn">Settings</button>
     <button class="solo" id="sound" aria-pressed="false">Sound</button>
     <button class="solo" id="guide" aria-pressed="true">Guide</button>
     <button class="solo" id="full">Fullscreen</button>
-    <p class="hint" id="hint">Hold <kbd>space</kbd>, or press and hold the screen, while you breathe in. Let go as you breathe out. <kbd>Enter</kbd> starts a session, <kbd>J</kbd> opens the journal, <kbd>1</kbd>–<kbd>4</kbd> switch scenes, <kbd>C</kbd> coherence colour, <kbd>H</kbd> hides everything.</p>
+    <p class="hint" id="hint">Hold <kbd>space</kbd>, or press and hold the screen, while you breathe in. Let go as you breathe out. <kbd>Enter</kbd> starts a session, <kbd>J</kbd> opens the journal, <kbd>1</kbd>–<kbd>6</kbd> switch scenes, <kbd>C</kbd> coherence colour, <kbd>,</kbd> settings, <kbd>H</kbd> hides everything.</p>
   </footer>
 </div>
 
@@ -117,8 +118,8 @@
       <h3>Colour</h3>
       <label class="field" for="tint"><span>Coherence colour in the visuals</span>
         <select id="tint">
+          <option value="soft">Soft tint and brightness (default)</option>
           <option value="off">Off, the scene keeps its own colours</option>
-          <option value="soft">Soft tint and brightness</option>
           <option value="strong">Strong tint and brightness</option>
         </select>
       </label>

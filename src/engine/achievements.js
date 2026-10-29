@@ -53,13 +53,13 @@ export const BADGES = [
   { id: 'rankMaster', group: 'Ranks', name: 'Master', desc: 'Reach the Master rank.',
     count: (c) => (c.level.peakRank >= 3 ? 1 : 0) },
 
-  { id: 'scenes', group: 'Explore', name: 'All four rooms', desc: 'Breathe in every scene.',
-    count: (c) => (c.scenes.size >= 4 ? 1 : 0) },
+  { id: 'scenes', group: 'Explore', name: 'Every room', desc: 'Breathe in every scene.',
+    count: (c) => (c.scenes.size >= c.sceneCount ? 1 : 0) },
   { id: 'patterns', group: 'Explore', name: 'Every rhythm', desc: 'Finish a session with every breathing pattern.',
     count: (c) => (c.patterns.size >= c.patternCount ? 1 : 0) },
 ];
 
-export function context(sessions, level, { rollover = 3, patternCount = 5 } = {}) {
+export function context(sessions, level, { rollover = 3, patternCount = 5, sceneCount = 6 } = {}) {
   const c = counted(sessions).sort((a, b) => a.start.localeCompare(b.start));
   const days = byDay(c, rollover);
   let comebacks = 0;
@@ -84,6 +84,7 @@ export function context(sessions, level, { rollover = 3, patternCount = 5 } = {}
     scenes,
     patterns,
     patternCount,
+    sceneCount,
     today: dayKey(Date.now(), rollover),
   };
 }
