@@ -32,7 +32,7 @@ const now = () => performance.now() / 1000;
 const motion = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.45 : 1;
 
 const DEFAULT_SETTINGS = { scene: 0, pattern: 0, guideMode: 'full', guideStyle: 'ring', volume: 0.6, sessionMin: 10, rollover: 3, device: 'practice', colours: 'own',
-  coherenceTint: 'soft', quality: 'auto', screenLight: false, palette: 'classic', custom: { inS: 5, holdIn: 0, outS: 5, holdOut: 0 } };
+  coherenceTint: 'soft', onboarded: false, quality: 'auto', screenLight: false, palette: 'classic', custom: { inS: 5, holdIn: 0, outS: 5, holdOut: 0 } };
 
 const app = {
   settings: { ...DEFAULT_SETTINGS },
@@ -128,7 +128,7 @@ async function connect(id) {
   renderDevices();
 }
 
-function onBeat(dev, { t, ibi }) {
+function onBeat(dev, { t, ibi, approx }) {
   if (app.device !== dev) return;
   const ok = app.engine.addBeat(t, ibi);
   app.beats.push({ t, ibi, ok });
@@ -136,7 +136,7 @@ function onBeat(dev, { t, ibi }) {
   if (app.session && ok) app.session.ibis.push([+(t - app.session.t0).toFixed(3), Math.round(ibi)]);
   // The beat light: shown at the beat's own time, delayed by the source's batching lag
   // so the blinks keep your real rhythm instead of bunching up when a batch arrives.
-  app.flashes.push({ at: t + (dev.lag || 0), ok });
+  if (!approx) app.flashes.push({ at: t + (dev.lag || 0), ok });
   if (app.flashes.length > 20) app.flashes.shift();
 }
 
@@ -145,6 +145,7 @@ function onBeat(dev, { t, ibi }) {
 function applyScreenLight() {
   const on = app.settings.screenLight && app.deviceId === 'camera';
   $('screenLight').hidden = !on;
+  $('ui').classList.toggle('screenlit', on); // move the readout below the bright band
 }
 
 let beatGlow = 0, beatOk = true;
@@ -159,6 +160,8 @@ function renderBeatLight() {
   el.style.opacity = (0.15 + 0.85 * beatGlow).toFixed(3);
   el.style.transform = `scale(${(0.8 + 0.5 * beatGlow).toFixed(3)})`;
   el.dataset.ok = beatOk ? '1' : '0';
+  const h = $('sensorHeart');
+  h.style.transform = `scale(${(1 + 0.28 * beatGlow).toFixed(3)})`;
 }
 
 function onScore(r) {
@@ -318,7 +321,7 @@ function renderStatus() {
   el.dataset.state = dev ? dev.state : 'off';
   const def = DEVICES.find((d) => d.id === app.deviceId);
   $('sensorName').textContent = def ? def.short : 'No sensor';
-  $('sensorDot').dataset.state = dev ? dev.state : 'off';
+  $('sensorHeart').dataset.state = dev ? dev.state : 'off';
   if (!$('sensorPanel').hidden) renderDevices();
 }
 
@@ -693,6 +696,52 @@ function setPalette(v) {
 $('palette').addEventListener('change', (e) => { setPalette(e.target.value); renderJournal(); });
 $('tint').addEventListener('change', (e) => { app.settings.coherenceTint = e.target.value; lastTint = ''; saveSettings(); });
 $('sensorBtn').addEventListener('click', () => openPanel('sensorPanel'));
+
+// ---------------------------------------------------------------- tour
+const TOUR_SOURCES = [
+  { id: 'camera', icon: '◉', title: 'Phone camera', line: 'Fingertip on the back camera, flashlight on.' },
+  { id: 'ble', icon: '≋', title: 'Bluetooth strap or watch', line: 'Chest strap, or a watch that shares heart rate.' },
+  { id: 'emwave', icon: '⌁', title: 'emWave 2', line: 'USB, on a computer in Chrome or Edge.' },
+  { id: 'practice', icon: '○', title: 'No sensor', line: 'Breathe with the keys or a held finger.' },
+];
+let tourStep = 0;
+function openTour() {
+  tourStep = 0;
+  $('tourSources').innerHTML = TOUR_SOURCES.map((s) => {
+    const def = DEVICES.find((d) => d.id === s.id);
+    const why = def.cls.support();
+    return `<button class="tsrc" data-src="${s.id}" ${why ? 'disabled' : ''}><span class="ti" aria-hidden="true">${s.icon}</span><b>${s.title}</b><span>${why ? esc(why) : s.line}</span></button>`;
+  }).join('');
+  $('tour').hidden = false;
+  showTourStep();
+}
+function showTourStep() {
+  document.querySelectorAll('.tstep').forEach((el, i) => { el.hidden = i !== tourStep; });
+  document.querySelectorAll('.tdots i').forEach((el, i) => el.classList.toggle('on', i === tourStep));
+  const last = tourStep === document.querySelectorAll('.tstep').length - 1;
+  $('tourBack').hidden = tourStep === 0;
+  $('tourNext').textContent = last ? 'Start breathing' : 'Next';
+  $('tourNext').focus();
+}
+function closeTour() {
+  $('tour').hidden = true;
+  if (!app.settings.onboarded) { app.settings.onboarded = true; saveSettings(); }
+  poke();
+}
+$('tourNext').addEventListener('click', () => {
+  if (tourStep >= document.querySelectorAll('.tstep').length - 1) return closeTour();
+  tourStep++; showTourStep();
+});
+$('tourBack').addEventListener('click', () => { tourStep = Math.max(0, tourStep - 1); showTourStep(); });
+$('tourSkip').addEventListener('click', closeTour);
+$('helpBtn').addEventListener('click', openTour);
+$('tourSources').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-src]');
+  if (!b) return;
+  document.querySelectorAll('.tsrc').forEach((x) => x.classList.toggle('picked', x === b));
+  connect(b.dataset.src);
+  tourStep++; showTourStep();
+});
 $('journalBtn').addEventListener('click', () => openPanel('journalPanel', 'progress'));
 $('settingsBtn').addEventListener('click', () => openPanel('journalPanel', 'settings'));
 $('sessionBtn').addEventListener('click', () => (app.session ? endSession() : startSession()));
@@ -806,7 +855,7 @@ function toast(msg) {
 // Fade the controls while you breathe.
 const ui = $('ui');
 let idleTimer = 0;
-const panelOpen = () => !$('sensorPanel').hidden || !$('journalPanel').hidden || !$('pacePanel').hidden || !$('summary').hidden;
+const panelOpen = () => !$('sensorPanel').hidden || !$('journalPanel').hidden || !$('pacePanel').hidden || !$('summary').hidden || !$('tour').hidden;
 function poke() {
   ui.classList.remove('idle');
   clearTimeout(idleTimer);
@@ -828,7 +877,8 @@ addEventListener('keydown', (e) => {
     if (typing || tag === 'BUTTON') return;
     e.preventDefault(); if (!e.repeat) setHold(true); wake(); return;
   }
-  if (e.key === 'Escape') { closePanels(); $('summary').hidden = true; return; }
+  if (e.key === 'Escape') { closePanels(); $('summary').hidden = true; if (!$('tour').hidden) closeTour(); return; }
+  if (e.key === '?' ) { openTour(); return; }
   if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === 'Enter' && tag !== 'BUTTON') { app.session ? endSession() : startSession(); return; }
   if (e.key >= '1' && e.key <= String(SCENES.length)) setScene(+e.key - 1);
@@ -978,6 +1028,7 @@ window.breathfield = { app, startSession, endSession, connect };
   delete app.settings.guide;
   applyGuide();
   if (P) applyQuality(app.settings.quality === 'auto' ? (isPhone ? 'light' : 'full') : app.settings.quality);
+  if (!app.settings.onboarded) openTour();
   // Sensors that need a browser dialog cannot reconnect on their own, so we
   // start with practice (or the demo) and let you pick the sensor again.
   connect(['practice', 'demo'].includes(app.settings.device) ? app.settings.device : 'practice');

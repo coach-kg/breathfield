@@ -48,7 +48,7 @@
       <label for="pat"><span>Breath</span></label><select id="pat"></select>
       <button class="ico" id="paceBtn" aria-label="Adjust pace" title="Adjust pace"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
     </div>
-    <button class="solo" id="sensorBtn"><i class="sdot" id="sensorDot"></i><b id="sensorName">Practice</b></button>
+    <button class="solo" id="sensorBtn" title="Heart source"><svg class="sheart" id="sensorHeart" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.6a4.3 4.3 0 0 1 7.5 2.7c0 5.6-7.5 10.2-7.5 10.2z"/></svg><b id="sensorName">Practice</b></button>
     <span class="spacer"></span>
     <button class="solo primary" id="sessionBtn">Start session</button>
     <div class="grp icons" role="group" aria-label="Tools">
@@ -56,6 +56,7 @@
       <button class="ico" id="settingsBtn" aria-label="Settings" title="Settings (,)"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg></button>
       <button class="ico" id="sound" aria-pressed="false" aria-label="Sound" title="Sound"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4h3l5 4V6L7 10z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/></svg></button>
       <button class="ico" id="guide" aria-pressed="true" aria-label="Guide" title="Guide (G)"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/></svg></button>
+      <button class="ico" id="helpBtn" aria-label="Tour" title="Tour (?)"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.6"/><circle cx="12" cy="17" r="0.6" fill="currentColor"/></svg></button>
       <button class="ico" id="full" aria-label="Fullscreen" title="Fullscreen (F)"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
     </div>
   </footer>
@@ -201,6 +202,49 @@
 
 <section class="summary" id="summary" hidden role="dialog" aria-labelledby="sumTitle">
   <div class="card" id="summaryCard"></div>
+</section>
+
+<section class="tour" id="tour" hidden role="dialog" aria-labelledby="tourTitle">
+  <div class="card tcard">
+    <div class="tstep">
+      <svg class="tart" viewBox="0 0 480 220" aria-hidden="true">
+        <defs>
+          <radialGradient id="tg1" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#d4c2ff" stop-opacity=".55"/><stop offset="1" stop-color="#d4c2ff" stop-opacity="0"/></radialGradient>
+          <linearGradient id="tg2" x1="0" x2="1"><stop offset="0" stop-color="#7fa8ff" stop-opacity="0"/><stop offset=".5" stop-color="#efeaff"/><stop offset="1" stop-color="#6ff0b4" stop-opacity="0"/></linearGradient>
+        </defs>
+        <circle cx="240" cy="110" r="100" fill="url(#tg1)"/>
+        <g fill="none" stroke-width="1.2">
+          <circle cx="240" cy="110" r="92" stroke="#7fa8ff" opacity=".35"/>
+          <circle cx="240" cy="110" r="70" stroke="#d4c2ff" opacity=".55"/>
+          <circle cx="240" cy="110" r="46" stroke="#6ff0b4" opacity=".8"/>
+          <ellipse cx="240" cy="110" rx="88" ry="34" stroke="#d4c2ff" opacity=".45" transform="rotate(28 240 110)"/>
+          <ellipse cx="240" cy="110" rx="88" ry="34" stroke="#d4c2ff" opacity=".45" transform="rotate(-28 240 110)"/>
+          <ellipse cx="240" cy="110" rx="34" ry="88" stroke="#7fa8ff" opacity=".4"/>
+        </g>
+        <path d="M0 150 C 60 150, 80 70, 140 70 S 220 150, 280 150 S 360 70, 420 70 S 470 110, 480 110" fill="none" stroke="url(#tg2)" stroke-width="2"/>
+        <circle cx="240" cy="129" r="7" fill="#efeaff"/><circle cx="240" cy="129" r="16" fill="#efeaff" opacity=".18"/>
+      </svg>
+      <h2 id="tourTitle">Breathe with the light</h2>
+      <p class="msg">Follow the ring: breathe in while it grows, out while it shrinks. Your heart rhythm paints the picture. Scattered, it looks restless and grey; as your rhythm settles into the breath, it turns calm, bright and symmetric.</p>
+    </div>
+    <div class="tstep" hidden>
+      <h2>Where does your heartbeat come from?</h2>
+      <p class="msg">Pick one now. You can change it any time with the <svg class="sheart" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.6a4.3 4.3 0 0 1 7.5 2.7c0 5.6-7.5 10.2-7.5 10.2z"/></svg> button at the bottom.</p>
+      <div class="tsources" id="tourSources"></div>
+    </div>
+    <div class="tstep" hidden>
+      <h2>Sessions, journal, settings</h2>
+      <p class="msg"><b>Start session</b> records your practice: time, coherence and heart rhythm go into the journal, with streaks and badges. The icons at the bottom right open the journal, settings, sound, guide and this tour again.</p>
+      <p class="msg">Everything stays on this device. Nothing is uploaded.</p>
+    </div>
+    <div class="tfoot">
+      <button class="solo" id="tourSkip">Skip</button>
+      <span class="tdots" aria-hidden="true"><i class="on"></i><i></i><i></i></span>
+      <span class="spacer"></span>
+      <button class="solo" id="tourBack" hidden>Back</button>
+      <button class="solo primary" id="tourNext">Next</button>
+    </div>
+  </div>
 </section>
 
 <div class="toast" id="toast" hidden role="status"></div>

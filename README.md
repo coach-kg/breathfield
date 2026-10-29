@@ -28,6 +28,7 @@ No build step and no dependencies: it is plain HTML and JavaScript, plus p5.js f
 | Bluetooth chest strap with beat intervals (Polar H10, Garmin HRM, Wahoo TICKR …) | Chrome or Edge on Mac, Windows, Android, ChromeOS | best | ready |
 | Fingertip on the phone camera | phones; the flashlight switches on in Chrome and Samsung Internet on Android (not Firefox, not iPhone) | good when you sit still | ready, experimental |
 | emWave 2 USB (start a session on the handheld) | Chrome or Edge on a computer | as good as emWave | live beats plus the emWave's own low/medium/high |
+| Watch sharing heart rate over Bluetooth (e.g. Polar Unite: Start training → Share HR with other devices) | Chrome or Edge | heart rate only, so coherence is approximate | ready |
 | Demo signal | everywhere | pretend | for trying things out |
 
 Safari does not support Bluetooth or USB devices in web pages, so use Chrome or Edge for those.
