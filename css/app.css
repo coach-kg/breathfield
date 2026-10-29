@@ -54,6 +54,10 @@ body { background: var(--void); color: var(--ink); font-family: var(--f-mono); f
 .meter[data-lvl="2"] i:nth-child(-n+2) { background: var(--mid); }
 .meter[data-lvl="3"] i { background: var(--high); }
 #spark { width: 168px; height: 38px; display: block; }
+.ewdot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); flex: 0 0 8px; align-self: center; transition: background 0.8s; }
+.ewdot[data-z="0"] { background: var(--low); }
+.ewdot[data-z="1"] { background: var(--mid); }
+.ewdot[data-z="2"] { background: var(--high); }
 .src { color: var(--mute); font-size: 9.5px; line-height: 1.5; white-space: normal; }
 .src[data-state="warn"] { color: var(--low); }
 .src[data-state="on"] { color: var(--ink); }
