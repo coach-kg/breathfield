@@ -194,3 +194,63 @@ test('games: coherence only ever helps', () => {
   }
   assert.ok(fallInterval(5) < fallInterval(1));
 });
+
+// ---------------------------------------------------------------- glow
+import { createGlowTracker, CUE_GAP_SEC } from '../src/engine/glow.js';
+
+test('glow: fills in high, slowly in medium, drains in low, never below zero', () => {
+  const g = createGlowTracker('classic');
+  let t = 0;
+  for (let i = 0; i < 10; i++) g.update(2, (t += 5));
+  assert.equal(g.glow, 20);
+  for (let i = 0; i < 10; i++) g.update(1, (t += 5));
+  assert.equal(g.glow, 30);
+  for (let i = 0; i < 50; i++) g.update(0, (t += 5));
+  assert.equal(g.glow, 0);
+  const h = createGlowTracker('gentle');
+  h.update(2, 5); h.update(0, 10);
+  assert.equal(h.glow, 2, 'gentle: low holds');
+  const s = createGlowTracker('steady');
+  s.update(1, 5); s.update(1, 10);
+  assert.equal(s.glow, 0, 'steady: medium holds');
+});
+
+test('glow: cues for zone changes, held minutes and milestones, without chatter', () => {
+  const g = createGlowTracker();
+  const all = [];
+  let t = 0;
+  const step = (z) => { all.push(...g.update(z, (t += 5)).map((e) => ({ ...e, t }))); };
+  step(0); step(1); step(2);
+  assert.deepEqual(all.map((e) => `${e.type}${e.to}`), ['up1', 'up2'], 'low → medium → high both ring');
+  // flickering across one edge: quiet within the gap
+  const n0 = all.length;
+  for (let i = 0; i < 2; i++) step(i % 2 ? 2 : 1);
+  assert.equal(all.length, n0);
+  for (let i = 0; i < 8; i++) step(i % 2 ? 2 : 1);
+  const changes = all.slice(n0).filter((e) => e.type === 'up' || e.type === 'down');
+  for (let i = 1; i < changes.length; i++) assert.ok(changes[i].t - changes[i - 1].t >= CUE_GAP_SEC);
+  // a full minute in high
+  for (let i = 0; i < 13; i++) step(2);
+  assert.ok(all.some((e) => e.type === 'held' && e.zone === 2 && e.minutes === 1));
+  for (let i = 0; i < 40; i++) step(2);
+  assert.ok(all.some((e) => e.type === 'milestone' && e.n === 100));
+  assert.ok(!all.some((e) => e.type === 'held' && e.zone === 0));
+});
+
+test('coherence: heart-rate-only sources are scored at the pacer, not at slow drifts', async () => {
+  const { CoherenceEngine: E } = await import('../src/engine/coherence.js');
+  // 1 Hz bpm samples: a big slow drift (0.045 Hz) plus a small breathing wave at the pacer (0.1 Hz)
+  const run = (approx, withBreath) => {
+    const e = new E(); e.approx = approx; let last = null;
+    for (let t = 0; t <= 90; t += 1) {
+      const bpm = 62 + 4 * Math.sin(2 * Math.PI * 0.045 * t) + (withBreath ? 2 * Math.sin(2 * Math.PI * 0.1 * t) : 0);
+      e.addBeat(t, 60000 / bpm);
+      const r = e.update(t + 0.01, 0.1); if (r) last = r;
+    }
+    return last;
+  };
+  assert.ok(run(false, false).score > 50, 'normal scoring rewards the drift');
+  assert.ok(run(true, false).score < 20, 'pacer scoring does not');
+  assert.ok(run(true, true).score > run(true, false).score + 15, 'and rewards following the breath');
+  assert.ok(Math.abs(run(true, true).peakHz - 0.1) < 0.02);
+});

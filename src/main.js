@@ -2,6 +2,7 @@ import { PATTERNS, breathAt, perMinute, cycleSec, setCustom, CUSTOM } from './en
 import { CoherenceEngine, STEP_SEC, MIN_SEC } from './engine/coherence.js';
 import { RANKS, thresholdsFor, zoneOf, visualLevel, initialLevelState, activeD, rankOf, adaptAfterSession, GREY, HOLD_SESSIONS } from './engine/levels.js';
 import { evaluate, gained } from './engine/achievements.js';
+import { createGlowTracker, GLOW_RULES } from './engine/glow.js';
 import { byDay, runs, currentStreak, bestStreak, totals, dayKey, addDays, keyToDate, MIN_SESSION_SEC } from './engine/progress.js';
 import * as store from './store.js';
 import { Drone } from './audio.js';
@@ -35,7 +36,7 @@ const now = () => performance.now() / 1000;
 const motion = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.45 : 1;
 
 const DEFAULT_SETTINGS = { scene: 0, pattern: 0, guideMode: 'full', guideStyle: 'ring', volume: 0.6, sessionMin: 10, rollover: 3, device: 'practice', colours: 'own',
-  coherenceTint: 'soft', onboarded: false, quality: 'auto', screenLight: false, palette: 'classic', custom: { inS: 5, holdIn: 0, outS: 5, holdOut: 0 } };
+  coherenceTint: 'soft', cues: 'soft', glowRule: 'classic', onboarded: false, quality: 'auto', screenLight: false, palette: 'classic', custom: { inS: 5, holdIn: 0, outS: 5, holdOut: 0 } };
 
 const app = {
   settings: { ...DEFAULT_SETTINGS },
@@ -62,6 +63,7 @@ const app = {
   gamePaused: false,
   gameBest: {}, // { stillfall: { best, plays } }
   touch: matchMedia('(pointer: coarse)').matches,
+  glow: createGlowTracker(),
 };
 
 const followEmwave = () => app.settings.colours === 'emwave' && app.deviceId === 'emwave' && app.emwave && now() - app.emwave.t < 15;
@@ -141,6 +143,8 @@ async function connect(id) {
 
 function onBeat(dev, { t, ibi, approx }) {
   if (app.device !== dev) return;
+  if (approx && !app.engine.approx) app.engine.approx = true;
+  if (approx && app.session) app.session.approx = true;
   const ok = app.engine.addBeat(t, ibi);
   app.beats.push({ t, ibi, ok });
   while (app.beats.length && app.beats[0].t < t - 70) app.beats.shift();
@@ -182,12 +186,31 @@ function onScore(r) {
   app.hr = r.hr;
   app.hist.push(r.score);
   if (app.hist.length > 24) app.hist.shift();
+  for (const e of app.glow.update(shownZone(), r.t)) playCue(e);
+  renderGlow();
   const s = app.session;
   if (s) {
     s.scores.push([+(r.t - s.t0).toFixed(1), +r.score.toFixed(1)]);
     s.timeIn[zoneOf(r.score, s.thresholds)] += STEP_SEC;
     if (r.hr) s.hrs.push(r.hr);
   }
+}
+
+const CUE_LEVEL = { off: 0, soft: 0.5, clear: 1 };
+function playCue(e) {
+  const level = CUE_LEVEL[app.settings.cues] || 0;
+  if (!level) return;
+  drone.ensure();
+  drone.cue(e.type, { to: e.to, zone: e.zone, level });
+}
+
+function renderGlow() {
+  $('glow').textContent = app.glow.glow;
+  const z = app.glow.zone;
+  const g = z == null ? null : GLOW_RULES[app.settings.glowRule].gain[z];
+  const el = $('glowTrend');
+  el.textContent = g == null ? '' : g > 0 ? `+${g}` : g < 0 ? `${g}` : '±0';
+  el.dataset.dir = g == null ? '' : g > 0 ? 'up' : g < 0 ? 'down' : 'hold';
 }
 
 function currentThresholds() {
@@ -223,6 +246,7 @@ function startSession() {
     games: new Set(app.game ? [app.game.id] : []),
     play: {},
   };
+  app.glow.reset(); renderGlow();
   const b = $('sessionBtn');
   b.textContent = 'End session'; b.classList.add('rec');
   toast(app.session.demo ? 'Recording a demo session. Demo sessions do not count toward streaks.' : 'Session started. Breathe with the ring.');
@@ -246,6 +270,7 @@ async function endSession(auto = false) {
     device: s.device, deviceLabel: s.deviceLabel, sensor: s.sensor, demo: s.demo,
     pattern: s.pattern, patternId: s.patternId, ...(s.customSteps ? { customSteps: s.customSteps } : {}), scenes: [...s.scenes],
     d: s.d, thresholds: s.thresholds,
+    glow: app.glow.glow, glowRule: app.settings.glowRule, ...(s.approx ? { approx: 'hr-only, scored at the pacer' } : {}),
     timeIn: s.timeIn, avgScore: avg(s.scores.map((x) => x[1])), avgHr: avg(s.hrs),
     scores: s.scores, ibis: s.ibis, ...(s.emwave.length ? { emwave: s.emwave } : {}), ...(s.ppg.length ? { ppg: s.ppg } : {}),
     ...(s.games.size ? { games: [...s.games], play: s.play } : {}), endedBy: auto ? 'timer' : 'you',
@@ -299,6 +324,7 @@ function showSummary(rec, events, fresh) {
     <div class="stats">
       <div class="stat"><b>${rec.avgScore == null ? '—' : Math.round(rec.avgScore)}</b><span>avg coherence</span></div>
       <div class="stat"><b>${rec.avgHr == null ? '—' : Math.round(rec.avgHr)}</b><span>avg bpm</span></div>
+      <div class="stat"><b>${rec.glow ?? '—'}</b><span>glow</span></div>
       <div class="stat"><b>${rec.demo ? '—' : streak}</b><span>day streak</span></div>
     </div>
     ${scored ? `<div><div class="zonebar"><i style="width:${pct(t[0])}%"></i><i style="width:${pct(t[1])}%"></i><i style="width:${pct(t[2])}%"></i></div>
@@ -617,7 +643,7 @@ function renderSessions() {
     const t = s.timeIn || [0, 0, 0], sum = t[0] + t[1] + t[2] || 1;
     const kind = s.demo ? 'demo' : s.sensor ? s.deviceLabel : 'practice';
     const played = (s.games || []).map((id) => { const g = GAMES.find((x) => x.id === id); const sc = s.play && s.play[id] ? s.play[id].score : null; return `${g ? g.name : id}${sc != null ? ` ${sc}` : ''}`; }).join(', ');
-    return `<div class="srow"><div><div class="when">${fmt.format(new Date(s.start))}</div><div class="meta">${fmtClock(s.durationSec)} · ${esc(PATTERNS[s.pattern] ? PATTERNS[s.pattern].name : '')} · ${esc(kind)}${played ? ` · ${esc(played)}` : ''}</div></div>
+    return `<div class="srow"><div><div class="when">${fmt.format(new Date(s.start))}</div><div class="meta">${fmtClock(s.durationSec)} · ${esc(PATTERNS[s.pattern] ? PATTERNS[s.pattern].name : '')} · ${esc(kind)}${s.glow != null ? ` · glow ${s.glow}` : ''}${played ? ` · ${esc(played)}` : ''}</div></div>
       <div class="score">${s.avgScore == null ? '—' : Math.round(s.avgScore)}<div class="meta">avg</div></div>
       <div class="zonebar"><i style="width:${(100 * t[0]) / sum}%"></i><i style="width:${(100 * t[1]) / sum}%"></i><i style="width:${(100 * t[2]) / sum}%"></i></div></div>`;
   }).join('')}</div>`;
@@ -634,6 +660,8 @@ async function renderSettings() {
   $('palette').value = app.settings.palette;
   $('rollover').value = String(app.settings.rollover);
   $('volume').value = String(Math.round(app.settings.volume * 100));
+  $('cues').value = app.settings.cues;
+  $('glowRule').value = app.settings.glowRule;
   $('backupBtn').hidden = !store.canBackupToFile();
   const persistent = await store.isPersistent();
   $('storageNote').textContent = persistent
@@ -940,6 +968,12 @@ $('quality').addEventListener('change', (e) => {
 $('colours').addEventListener('change', (e) => { app.settings.colours = e.target.value; saveSettings(); });
 $('sessionMin').addEventListener('change', (e) => { app.settings.sessionMin = +e.target.value; saveSettings(); });
 $('rollover').addEventListener('change', (e) => { app.settings.rollover = +e.target.value; saveSettings(); app.badges = evaluateBadges(); renderJournal(); });
+$('glowRule').innerHTML = Object.entries(GLOW_RULES).map(([k, r]) => `<option value="${k}">${r.name}</option>`).join('');
+$('cues').addEventListener('change', (e) => {
+  app.settings.cues = e.target.value; saveSettings();
+  if (e.target.value !== 'off') { drone.ensure(); setTimeout(() => drone.cue('up', { to: 2, level: CUE_LEVEL[e.target.value] }), 60); }
+});
+$('glowRule').addEventListener('change', (e) => { app.settings.glowRule = e.target.value; app.glow.setRule(e.target.value); saveSettings(); renderGlow(); });
 $('volume').addEventListener('input', (e) => { app.settings.volume = e.target.value / 100; drone.volume = app.settings.volume; saveSettings(); });
 $('exportBtn').addEventListener('click', async () => {
   store.download(`breathfield-journal-${new Date().toISOString().slice(0, 10)}.json`, await store.exportAll());
@@ -1003,7 +1037,10 @@ function poke() {
 // During a game, taps and moves on the canvas are play, not a request for the controls.
 const onCanvas = (e) => app.game && e.target && e.target.tagName === 'CANVAS';
 addEventListener('pointermove', (e) => { if (!onCanvas(e)) poke(); });
-addEventListener('pointerdown', (e) => { if (!onCanvas(e)) poke(); wake(); });
+addEventListener('pointerdown', (e) => { if (!onCanvas(e)) poke(); wake(); unlockAudio(); });
+addEventListener('keydown', unlockAudio);
+// Browsers only allow sound after a tap or key press, so the cues get ready on the first one.
+function unlockAudio() { if (app.settings.cues !== 'off') drone.ensure(); }
 
 function setHold(v) { app.holding = v; app.lastInput = now(); }
 function wake() { try { navigator.wakeLock && navigator.wakeLock.request('screen').catch(() => {}); } catch (e) { /* not allowed */ } }
@@ -1136,7 +1173,7 @@ new p5((p) => {
     T += sdt;
     const br = breathAt(t - app.pacer0, app.settings.pattern);
     app.breathB = br.b;
-    const r = app.engine.update(t);
+    const r = app.engine.update(t, 1 / cycleSec(app.settings.pattern));
     if (r) onScore(r);
     const target = followEmwave() ? [0.18, 0.5, 0.85][app.emwave.zone] ?? 0.3
       : app.score == null ? 0.3 : visualLevel(app.score, currentThresholds());
@@ -1173,12 +1210,13 @@ async function loadAll() {
     app.gameBest = await store.get('games', {}) || {};
   } catch (e) { /* first run or storage blocked */ }
   drone.volume = app.settings.volume;
+  app.glow.setRule(app.settings.glowRule);
   app.badges = evaluateBadges();
   renderJournal();
 }
 
 // Handy from the browser console, e.g. breathfield.app.level
-window.breathfield = { app, startSession, endSession, connect, enterGame, leaveGame };
+window.breathfield = { app, startSession, endSession, connect, enterGame, leaveGame, drone };
 
 (async function start() {
   await loadAll();
