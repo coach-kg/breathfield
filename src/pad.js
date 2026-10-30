@@ -1,13 +1,16 @@
 // Pacer pad: the phone runs the same breathing pacer as Breathfield on the
-// computer and vibrates with it. No server and no connection between the two:
-// the link carries the pattern and the moment the pacer started (wall-clock
-// milliseconds), and both devices keep internet time, so they stay in step to
-// about a tenth of a second. A nudge corrects any leftover offset.
+// computer and vibrates with it, on its own clock: the link carries the
+// pattern and the moment the pacer started (wall-clock milliseconds), and both
+// devices keep internet time, so they stay in step to about a tenth of a
+// second. A nudge corrects any leftover offset.
 //
-// Link: pad.html#p=i5,o5&e=1793364476635   (i in, o out, h hold; seconds)
+// Link: pad.html#p=i5,o5&e=1793364476635&r=topic   (i in, o out, h hold; seconds)
+// With r (a relay topic), later pace changes and coherence taps arrive through
+// the relay (src/relay.js), so there is no need to scan again.
 
 import { PATTERNS, CUSTOM, breathAt, perMinute } from './engine/breath.js';
 import { createHaptics, canVibrate } from './haptics.js';
+import { subscribe } from './relay.js';
 
 const $ = (id) => document.getElementById(id);
 const KIND = { i: 'in', o: 'out', h: 'hold' };
@@ -19,8 +22,10 @@ export function parseSteps(s) {
 }
 
 const q = new URLSearchParams(location.hash.slice(1));
-const steps = parseSteps(q.get('p'));
-const epoch = Number(q.get('e'));
+let steps = parseSteps(q.get('p'));
+let epoch = Number(q.get('e'));
+const topic = q.get('r');
+const relay = q.get('relay') || 'https://ntfy.sh';
 const store = (() => { try { return localStorage; } catch (e) { return null; } })();
 const saved = (k, d) => { try { return (store && store.getItem(`pad:${k}`)) || d; } catch (e) { return d; } };
 const save = (k, v) => { try { store && store.setItem(`pad:${k}`, v); } catch (e) { /* private mode */ } };
@@ -37,13 +42,41 @@ if (!steps || !(epoch > 0)) {
   $('msg').classList.add('warn');
   $('go').disabled = true;
 } else {
-  PATTERNS[CUSTOM].steps = steps;
-  $('pace').textContent = `${steps.map(([k, d]) => `${d} ${k}`).join(' · ')} · ${perMinute(CUSTOM).toFixed(1)} / min`;
+  applyPace();
   if (!canVibrate()) {
     $('msg').textContent = 'This browser cannot vibrate. On Android use Chrome, Samsung Internet, Brave or Edge (Firefox and iPhones cannot). The circle still shows the pacer.';
     $('msg').classList.add('warn');
     $('go').disabled = true;
   }
+}
+
+function applyPace() {
+  PATTERNS[CUSTOM].steps = steps;
+  $('pace').textContent = `${steps.map(([k, d]) => `${d} ${k}`).join(' · ')} · ${perMinute(CUSTOM).toFixed(1)} / min`;
+}
+
+// Follow the computer: new paces and coherence taps arrive through the relay.
+let lastAt = Number(q.get('t')) || 0; // ignore relayed paces older than the scanned code
+$('taps').checked = saved('taps', '1') === '1';
+$('taps').addEventListener('change', (e) => save('taps', e.target.checked ? '1' : '0'));
+if (topic && steps) {
+  $('link').textContent = 'Connecting to follow the computer…';
+  subscribe(relay, topic, (m, sentAt) => {
+    if (m.t === 'pace' && m.at > lastAt) {
+      const s = parseSteps(m.p);
+      if (s && m.e > 0) {
+        lastAt = m.at; steps = s; epoch = m.e; applyPace();
+        if (Date.now() - m.at < 60000) $('link').textContent = 'Following the computer: the pace just changed.';
+      }
+    } else if (m.t === 'tap' && on && $('taps').checked && Date.now() / 1000 - sentAt < 15) {
+      haptics.reward(m.ev || {}, performance.now() / 1000);
+    }
+  }, (state) => {
+    $('link').textContent = state === 'live' ? 'Following the computer: pace changes and taps arrive by themselves.' : 'Lost the link to the computer, retrying… The rhythm carries on.';
+  });
+} else if (steps) {
+  $('link').textContent = 'Not following the computer: scan again if you change the pace there.';
+  $('taps').closest('label').hidden = true;
 }
 
 const showOffset = () => { $('offset').textContent = `${offset >= 0 ? '+' : '−'}${Math.abs(offset).toFixed(1)} s`; };

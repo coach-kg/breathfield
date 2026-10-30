@@ -285,3 +285,18 @@ test('pace test: finds the rate where the heart swings most', () => {
   assert.deepEqual(paceFor(5.5), { inS: 5.5, holdIn: 0, outS: 5.4, holdOut: 0 });
   assert.deepEqual(paceFor(6, true), { inS: 4.5, holdIn: 0, outS: 5.5, holdOut: 0 });
 });
+
+test('breath: switching patterns keeps the breath where it is', async () => {
+  const { breathAt, matchPhase, PATTERNS } = await import('../src/engine/breath.js');
+  const iEven = PATTERNS.findIndex((p) => p.id === 'six'), iLong = PATTERNS.findIndex((p) => p.id === 'longout'), iBox = PATTERNS.findIndex((p) => p.id === 'box');
+  for (const t of [1, 2.5, 4, 6, 8.7]) {
+    const a = breathAt(t, iEven);
+    const b = breathAt(matchPhase(a, iLong), iLong);
+    assert.equal(b.kind, a.kind, `t=${t}`);
+    assert.ok(Math.abs(b.b - a.b) < 0.03, `t=${t}: ${a.b} vs ${b.b}`);
+  }
+  const top = breathAt(matchPhase({ kind: 'holdIn', b: 1 }, iBox), iBox);
+  assert.equal(top.kind, 'holdIn');
+  const turn = breathAt(matchPhase({ kind: 'holdIn', b: 1 }, iEven), iEven);
+  assert.ok(turn.kind === 'in' && turn.b > 0.97, 'no hold: go to the top of the in-breath');
+});

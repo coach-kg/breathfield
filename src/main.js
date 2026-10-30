@@ -1,4 +1,5 @@
-import { PATTERNS, breathAt, perMinute, cycleSec, setCustom, CUSTOM } from './engine/breath.js';
+import { PATTERNS, breathAt, perMinute, cycleSec, setCustom, CUSTOM, matchPhase } from './engine/breath.js';
+import { relayBase, newTopic, publish } from './relay.js';
 import { CoherenceEngine, STEP_SEC, MIN_SEC } from './engine/coherence.js';
 import { RANKS, thresholdsFor, zoneOf, visualLevel, initialLevelState, activeD, rankOf, adaptAfterSession, GREY, HOLD_SESSIONS } from './engine/levels.js';
 import { evaluate, gained } from './engine/achievements.js';
@@ -190,7 +191,7 @@ function onScore(r) {
   app.hr = r.hr;
   app.hist.push(r.score);
   if (app.hist.length > 24) app.hist.shift();
-  for (const e of app.glow.update(shownZone(), r.t)) { playCue(e); if (app.settings.hapticTaps && hapticsOn()) haptics.reward(e, now()); }
+  for (const e of app.glow.update(shownZone(), r.t)) { playCue(e); if (app.settings.hapticTaps && hapticsOn()) haptics.reward(e, now()); sendTap(e); }
   renderGlow();
   const s = app.session;
   if (s) {
@@ -714,6 +715,7 @@ function setScene(i) {
   $('stage').classList.toggle('orbit', SCENES[i].id === 'lines');
   if (app.session) app.session.scenes.add(SCENES[i].id);
   scenes && scenes.clear();
+  refreshBackdrop();
   saveSettings();
 }
 
@@ -730,25 +732,48 @@ function applyCustom() {
   if (app.settings.pattern === CUSTOM) $('rate').textContent = perMinute(CUSTOM).toFixed(1);
 }
 
-function setPattern(i) {
+/**
+ * Switch the breathing pattern. Normally it continues from where the breath is
+ * (same depth, same direction) instead of jumping back to the start; the pace
+ * test asks for a fresh start of each block.
+ */
+function setPattern(i, { fresh = false } = {}) {
   app.settings.pattern = i;
-  app.pacer0 = now();
+  app.pacer0 = !fresh && app.lastBr ? now() - matchPhase(app.lastBr, i) : now();
   $('pat').value = String(i);
   $('rate').textContent = perMinute(i).toFixed(1);
   saveSettings();
   if (!$('padPanel').hidden) renderPad();
+  sendPaceSoon();
 }
 
 // ---------------------------------------------------------------- pacer pad
 // A link for the phone with the pattern and the wall-clock moment the pacer
 // started; the phone (pad.html) runs the same rhythm and vibrates with it.
 
+const padSteps = () => PATTERNS[app.settings.pattern].steps.map(([k, d]) => `${k[0]}${+d.toFixed(2)}`).join(',');
+const padEpoch = () => Math.round(Date.now() - (now() - app.pacer0) * 1000);
+const padSyncOn = () => app.settings.padSync !== false && !!app.settings.padTopic;
+
+/** Tell a listening phone about the current pace (debounced while sliders move). */
+let paceTimer = 0;
+function sendPaceSoon() {
+  if (!padSyncOn()) return;
+  clearTimeout(paceTimer);
+  paceTimer = setTimeout(() => publish(relayBase(), app.settings.padTopic, { t: 'pace', p: padSteps(), e: padEpoch(), at: Date.now() }), 700);
+}
+function sendTap(e) {
+  if (!padSyncOn() || !app.padLive) return;
+  publish(relayBase(), app.settings.padTopic, { t: 'tap', ev: { type: e.type, to: e.to, zone: e.zone }, at: Date.now() });
+}
+
 function padLink() {
-  const steps = PATTERNS[app.settings.pattern].steps.map(([k, d]) => `${k[0]}${+d.toFixed(2)}`).join(',');
-  const epoch = Math.round(Date.now() - (now() - app.pacer0) * 1000);
+  const steps = padSteps();
+  const epoch = padEpoch();
   // A phone cannot reach this computer's own address, so local copies point at the public site.
   const base = /github\.io$/.test(location.hostname) ? new URL('pad.html', location.href).href : 'https://coach-kg.github.io/breathfield/pad.html';
-  return `${base}#p=${steps}&e=${epoch}`;
+  const relay = relayBase() === 'https://ntfy.sh' ? '' : `&relay=${encodeURIComponent(relayBase())}`;
+  return `${base}#p=${steps}&e=${epoch}${padSyncOn() ? `&r=${app.settings.padTopic}&t=${Date.now()}${relay}` : ''}`;
 }
 
 let qrLib = null;
@@ -767,6 +792,9 @@ function loadQr() {
 }
 
 async function renderPad() {
+  if (!app.settings.padTopic) { app.settings.padTopic = newTopic(); saveSettings(); }
+  app.padLive = true;
+  $('padSync').checked = app.settings.padSync !== false;
   const link = padLink();
   $('padLinkNote').textContent = link;
   const c = $('padQr'), x = c.getContext('2d');
@@ -785,6 +813,7 @@ async function renderPad() {
   }
 }
 document.querySelectorAll('[data-open-pad]').forEach((b) => b.addEventListener('click', () => openPanel('padPanel')));
+$('padSync').addEventListener('change', (e) => { app.settings.padSync = e.target.checked; saveSettings(); renderPad(); });
 $('padCopy').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(padLink()); toast('Link copied. Send it to your phone and open it there.'); } catch (e) { toast('Copy did not work here; select the link text instead.'); }
 });
@@ -801,7 +830,7 @@ function onPaceInput() {
   stopPaceTestForManualPace();
   app.settings.custom = { inS: +$('inS').value, holdIn: +$('holdIn').value, outS: +$('outS').value, holdOut: +$('holdOut').value };
   applyCustom();
-  if (app.settings.pattern !== CUSTOM) setPattern(CUSTOM); else saveSettings();
+  setPattern(CUSTOM); // continues smoothly from the current breath
 }
 ['inS', 'holdIn', 'outS', 'holdOut'].forEach((k) => $(k).addEventListener('input', onPaceInput));
 $('pacePanel').addEventListener('click', (e) => {
@@ -849,6 +878,8 @@ function enterGame(id) {
   const def = gameById(id);
   if (!def) return;
   if (app.game) leaveGame(true);
+  // a still copy of the scene that is on screen now becomes the backdrop
+  if (!app.game && P) takeBackdrop(P);
   app.game = { id, def, inst: def.create() };
   app.gamePaused = false;
   document.body.classList.add('gaming');
@@ -901,18 +932,34 @@ function updateBreathPad() {
   if ($('breathPad').hidden === show) $('breathPad').hidden = !show;
 }
 
+// The scene behind a game is a still, dimmed snapshot: it costs one image copy a
+// frame instead of running the scene. Picking another scene renders it for about
+// half a second and takes a new snapshot.
+const backdropSnap = { canvas: null, render: 0 };
+function takeBackdrop(p) {
+  const c = backdropSnap.canvas || (backdropSnap.canvas = document.createElement('canvas'));
+  c.width = p.canvas.width; c.height = p.canvas.height;
+  const x = c.getContext('2d');
+  x.drawImage(p.canvas, 0, 0);
+  x.fillStyle = 'rgba(6,5,10,0.78)';
+  x.fillRect(0, 0, c.width, c.height);
+}
+function refreshBackdrop() { if (app.game) { backdropSnap.render = 30; scenes && scenes.clear(); } }
+
 function drawGame(p, dt, br) {
   const g = app.game;
   const ctx = p.drawingContext;
-  const over = qualityNow === 'full';
-  if (over) {
+  if (backdropSnap.render > 0) {
     scenes.draw({ scene: app.settings.scene, b: br.b, coh: app.visual, T, dt: dt * motion, hue, travel, hr: app.hrSmooth, hrv: app.hrv });
-    ctx.save();
-    ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
-    ctx.fillStyle = 'rgba(6,5,10,0.8)';
-    ctx.fillRect(0, 0, p.width, p.height);
-    ctx.restore();
+    if (--backdropSnap.render === 0) takeBackdrop(p);
   }
+  const over = !!backdropSnap.canvas;
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  if (backdropSnap.render > 0) { ctx.fillStyle = 'rgba(6,5,10,0.78)'; ctx.fillRect(0, 0, p.canvas.width, p.canvas.height); }
+  else if (over) ctx.drawImage(backdropSnap.canvas, 0, 0, p.canvas.width, p.canvas.height);
+  ctx.restore();
   const paused = gamePaused();
   ctx.save();
   ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
@@ -948,7 +995,7 @@ function pacerTo(c) {
   setCustom(c);
   const opt = $('pat').querySelector(`option[value="${CUSTOM}"]`);
   if (opt) opt.textContent = PATTERNS[CUSTOM].name;
-  setPattern(CUSTOM);
+  setPattern(CUSTOM, { fresh: true });
 }
 
 function startPaceTest() {
@@ -1401,6 +1448,7 @@ new p5((p) => {
   p.windowResized = () => {
     p.resizeCanvas(window.innerWidth, window.innerHeight);
     scenes.resize(); scenes.clear();
+    refreshBackdrop();
   };
   p.draw = () => {
     watchFps();
@@ -1410,6 +1458,7 @@ new p5((p) => {
     T += sdt;
     const br = breathAt(t - app.pacer0, app.settings.pattern);
     app.breathB = br.b;
+    app.lastBr = br;
     const r = app.engine.update(t, 1 / cycleSec(app.settings.pattern));
     if (r) onScore(r);
     const target = followEmwave() ? [0.18, 0.5, 0.85][app.emwave.zone] ?? 0.3
@@ -1464,7 +1513,7 @@ window.breathfield = { app, startSession, endSession, connect, enterGame, leaveG
   setPalette(app.settings.palette);
   applyCustom();
   setScene(app.settings.scene);
-  setPattern(app.settings.pattern);
+  setPattern(app.settings.pattern, { fresh: true });
   if (app.settings.guide === false && !('guideMode' in (await store.get('settings', {})))) app.settings.guideMode = 'off';
   delete app.settings.guide;
   applyGuide();
