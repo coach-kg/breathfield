@@ -47,6 +47,12 @@ that Breathfield keeps updated after every session. Nothing is uploaded anywhere
 
 How coherence, the adaptive ranks and the badges work: [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md).
 
+## Find your pace, feel the pacer
+
+*Breathing pace → Find my pace* runs a 10-minute test (five rates, 2 minutes each) and suggests the
+breathing rate where your heart swings most, with a history so you can see if it drifts. On
+Android phones the pacer can also be felt as vibration (Settings → Haptics).
+
 ## Games
 
 Press **Play** for five small games where a coherent heart quietly helps: Stillfall (falling

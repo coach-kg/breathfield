@@ -27,6 +27,24 @@ So for these sources the peak is only searched within ±0.02 Hz of the pacer: th
 measures how much your heart rate follows your breathing. Expect lower numbers than with a strap
 or the emWave; the session is marked `approx` in the journal.
 
+## Find my pace
+
+`src/engine/resonance.js`, after the clinical resonance-frequency protocol (Lehrer and colleagues;
+reviewed by Shaffer & Meehan 2020). The pacer runs 6.5, 6, 5.5, 5 and 4.5 breaths a minute, even
+in and out, 2 minutes each. For each rate the first 30 seconds are skipped and the rest is
+analysed against the pacer (there is no breathing belt, so the pacer stands in for the breath):
+
+- the heart-rate wave at the breathing rate, fitted by least squares: its peak-to-trough size and
+  how much of the variation it explains;
+- the average max − min heart rate within each breath;
+- the phase: when heart rate peaks relative to the end of the in-breath (about 0° at resonance;
+  it peaks later at faster rates and earlier at slower ones).
+
+Score = 0.4 · size + 0.25 · max−min + 0.2 · fit + 0.15 · phase closeness, each relative to the best
+rate. A best result at 6.5 or 4.5 is flagged (the true pace may lie beyond), and so is a near tie.
+Results are kept (Breathing pace panel, and in the export) so you can see whether your pace drifts:
+in one small study it changed between tests a week apart for 14 of 21 people.
+
 ## Glow score
 
 `src/engine/glow.js`. Like the emWave's accumulated score: every 5-second update adds points for
@@ -83,6 +101,24 @@ in the drone's key: a rising pair or rise of three when you move up a zone, a qu
 when you move down, a warm chord after each minute held in high (one note in medium), and a high
 shimmer every 100 glow points. Wobbling across one edge sounds at most once every 12 seconds;
 climbing low → medium → high rings both steps. Low never gets a sound of its own.
+
+## Haptics
+
+`src/haptics.js`, through the browser's vibration API (Android only; Macs, iPhones and desktop
+browsers cannot vibrate from a web page). The motor is on or off, so a swell is made from density:
+ticks every 0.75 s at the start of the in-breath closing to every 0.2 s at the top, a gentle double
+tap at each turn, and optionally thinning ticks through the out-breath. In studies, smooth swells
+beat single pulses, which people found easy to miss or startling. Other modes: a soft tap on every
+heartbeat, and rare positive taps (climbing a zone, a minute in high, every 100 glow). Vibration
+is always off while the phone camera reads your pulse.
+
+## Motion artifacts
+
+The phone camera sees blood volume in the fingertip, and any movement of the finger changes the
+picture far more than a heartbeat does. While the camera is the heart source, the phone's motion
+sensor is watched: a beat whose interval overlaps movement is marked and left out of the score
+(the beat light shows it orange). All sources also reject impossible intervals (outside 30–200 bpm)
+and sudden jumps of more than 30% from the recent median.
 
 ## Journal file
 

@@ -3,9 +3,11 @@ import { CoherenceEngine, STEP_SEC, MIN_SEC } from './engine/coherence.js';
 import { RANKS, thresholdsFor, zoneOf, visualLevel, initialLevelState, activeD, rankOf, adaptAfterSession, GREY, HOLD_SESSIONS } from './engine/levels.js';
 import { evaluate, gained } from './engine/achievements.js';
 import { createGlowTracker, GLOW_RULES } from './engine/glow.js';
+import { TEST_RATES, BLOCK_SEC, SETTLE_SEC, analyseBlock, pickResonance, paceFor } from './engine/resonance.js';
 import { byDay, runs, currentStreak, bestStreak, totals, dayKey, addDays, keyToDate, MIN_SESSION_SEC } from './engine/progress.js';
 import * as store from './store.js';
 import { Drone } from './audio.js';
+import { createHaptics, canVibrate } from './haptics.js';
 import { SCENES, createScenes, drawGuide, drawWaveGuide } from './visuals/scenes.js';
 const isPhone = matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 820;
 import { badgeGlyph } from './visuals/badges.js';
@@ -36,7 +38,7 @@ const now = () => performance.now() / 1000;
 const motion = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.45 : 1;
 
 const DEFAULT_SETTINGS = { scene: 0, pattern: 0, guideMode: 'full', guideStyle: 'ring', volume: 0.6, sessionMin: 10, rollover: 3, device: 'practice', colours: 'own',
-  coherenceTint: 'soft', cues: 'soft', glowRule: 'classic', onboarded: false, quality: 'auto', screenLight: false, palette: 'classic', custom: { inS: 5, holdIn: 0, outS: 5, holdOut: 0 } };
+  coherenceTint: 'soft', cues: 'soft', glowRule: 'classic', haptic: 'off', hapticTaps: false, onboarded: false, quality: 'auto', screenLight: false, palette: 'classic', custom: { inS: 5, holdIn: 0, outS: 5, holdOut: 0 } };
 
 const app = {
   settings: { ...DEFAULT_SETTINGS },
@@ -64,6 +66,7 @@ const app = {
   gameBest: {}, // { stillfall: { best, plays } }
   touch: matchMedia('(pointer: coarse)').matches,
   glow: createGlowTracker(),
+  paceTests: [], // results of "Find my pace"
 };
 
 const followEmwave = () => app.settings.colours === 'emwave' && app.deviceId === 'emwave' && app.emwave && now() - app.emwave.t < 15;
@@ -141,11 +144,12 @@ async function connect(id) {
   renderDevices();
 }
 
-function onBeat(dev, { t, ibi, approx }) {
+function onBeat(dev, { t, ibi, approx, moved }) {
   if (app.device !== dev) return;
   if (approx && !app.engine.approx) app.engine.approx = true;
   if (approx && app.session) app.session.approx = true;
-  const ok = app.engine.addBeat(t, ibi);
+  const ok = moved ? false : app.engine.addBeat(t, ibi);
+  if (paceTest && ok) paceTest.beats.push([t - paceTest.t0, ibi]);
   app.beats.push({ t, ibi, ok });
   while (app.beats.length && app.beats[0].t < t - 70) app.beats.shift();
   if (app.session && ok) app.session.ibis.push([+(t - app.session.t0).toFixed(3), Math.round(ibi)]);
@@ -168,7 +172,7 @@ function renderBeatLight() {
   const tNow = now();
   while (app.flashes.length && app.flashes[0].at <= tNow) {
     const f = app.flashes.shift();
-    if (tNow - f.at < 0.5) { beatGlow = 1; beatOk = f.ok; }
+    if (tNow - f.at < 0.5) { beatGlow = 1; beatOk = f.ok; if (f.ok && hapticsOn() && app.settings.haptic === 'heart') haptics.heartbeat(tNow); }
   }
   beatGlow *= 0.9;
   const el = $('beatDot');
@@ -186,7 +190,7 @@ function onScore(r) {
   app.hr = r.hr;
   app.hist.push(r.score);
   if (app.hist.length > 24) app.hist.shift();
-  for (const e of app.glow.update(shownZone(), r.t)) playCue(e);
+  for (const e of app.glow.update(shownZone(), r.t)) { playCue(e); if (app.settings.hapticTaps && hapticsOn()) haptics.reward(e, now()); }
   renderGlow();
   const s = app.session;
   if (s) {
@@ -195,6 +199,10 @@ function onScore(r) {
     if (r.hr) s.hrs.push(r.hr);
   }
 }
+
+// Vibration shakes a fingertip on the camera and spoils its pulse signal.
+const haptics = createHaptics();
+const hapticsOn = () => canVibrate() && app.deviceId !== 'camera';
 
 const CUE_LEVEL = { off: 0, soft: 0.5, clear: 1 };
 function playCue(e) {
@@ -393,7 +401,7 @@ function renderDevices() {
         ${extra}
       </div>${d.id === 'camera' && active ? `<div class="camrow"><div class="campreview-slot"></div><canvas id="ppgTrace" width="480" height="150" aria-label="Pulse signal from the camera, last 6 seconds"></canvas></div>
         ${app.device.torchNote ? `<p class="why">${esc(app.device.torchNote)}</p>` : ''}
-        ${app.device.diag ? `<p class="diag">${esc(app.device.diag.lens)} · facing ${esc(app.device.diag.facing)} · light ${esc(app.device.diag.torch)} · fill ${esc(app.device.diag.fill)} · ${esc(String(app.device.diag.fps))} fps</p>` : ''}` : ''}</div>`;
+        ${app.device.diag ? `<p class="diag">${esc(app.device.diag.lens)} · facing ${esc(app.device.diag.facing)} · light ${esc(app.device.diag.torch)} · fill ${esc(app.device.diag.fill)} · ${esc(String(app.device.diag.fps))} fps · motion sensor ${app.device.motionSensor ? 'on, moving beats left out' : 'not reporting'}</p>` : ''}` : ''}</div>`;
   }).join('');
   const slot = list.querySelector('.campreview-slot');
   if (slot && app.device && app.device.video) slot.appendChild(app.device.video);
@@ -497,6 +505,7 @@ function renderSecond() {
   drawSpark();
   if (!$('sensorPanel').hidden) drawWave();
   updateBreathPad();
+  if (paceTest) tickPaceTest();
 }
 
 function drawSpark() {
@@ -661,6 +670,10 @@ async function renderSettings() {
   $('rollover').value = String(app.settings.rollover);
   $('volume').value = String(Math.round(app.settings.volume * 100));
   $('cues').value = app.settings.cues;
+  $('haptic').value = app.settings.haptic;
+  $('hapticTaps').checked = app.settings.hapticTaps;
+  $('haptic').disabled = $('hapticTaps').disabled = !canVibrate();
+  if (!canVibrate()) $('hapticNote').textContent = 'This browser or device cannot vibrate from a web page (Macs, iPhones and desktop browsers can\'t). On an Android phone in Chrome, Samsung Internet or Firefox you can turn on a breathing pacer you feel, a soft tap per heartbeat, and gentle taps when coherence climbs.';
   $('glowRule').value = app.settings.glowRule;
   $('backupBtn').hidden = !store.canBackupToFile();
   const persistent = await store.isPersistent();
@@ -719,9 +732,10 @@ $('pat').innerHTML = PATTERNS.map((p, i) => `<option value="${i}">${p.name}</opt
 $('manualRank').innerHTML = RANKS.map((r, i) => `<option value="${i}">${r.name}</option>`).join('');
 
 $('sceneSel').addEventListener('change', (e) => setScene(+e.target.value));
-$('pat').addEventListener('change', (e) => setPattern(+e.target.value));
+$('pat').addEventListener('change', (e) => { stopPaceTestForManualPace(); setPattern(+e.target.value); });
 $('paceBtn').addEventListener('click', () => openPanel('pacePanel'));
 function onPaceInput() {
+  stopPaceTestForManualPace();
   app.settings.custom = { inS: +$('inS').value, holdIn: +$('holdIn').value, outS: +$('outS').value, holdOut: +$('holdOut').value };
   applyCustom();
   if (app.settings.pattern !== CUSTOM) setPattern(CUSTOM); else saveSettings();
@@ -861,6 +875,148 @@ const padOff = () => { if (!padHeld) return; padHeld = false; $('breathPad').cla
 $('breathPad').addEventListener('pointerdown', padOn);
 ['pointerup', 'pointercancel', 'pointerleave'].forEach((t) => $('breathPad').addEventListener(t, padOff));
 
+// ---------------------------------------------------------------- find my pace
+// Five even pacers from 6.5 down to 4.5 breaths a minute, 2 minutes each. The
+// beats of each block are analysed (src/engine/resonance.js) and the rate where
+// the heart swings most in step with the breath is suggested.
+
+let paceTest = null;
+
+/** Point the custom pattern at a pace without saving it as the user's own. */
+function pacerTo(c) {
+  setCustom(c);
+  const opt = $('pat').querySelector(`option[value="${CUSTOM}"]`);
+  if (opt) opt.textContent = PATTERNS[CUSTOM].name;
+  setPattern(CUSTOM);
+}
+
+function startPaceTest() {
+  if (paceTest) return;
+  if (!app.device || app.deviceId === 'practice') { toast('The pace test needs a heart source: the emWave, a strap, a watch or the camera.'); return; }
+  paceTest = { i: 0, results: [], beats: [], prevPattern: app.settings.pattern, device: app.device.label || app.deviceId, ownSession: !app.session };
+  if (!app.session) startSession();
+  app.session.paceTest = true;
+  closePanels();
+  $('testBar').hidden = false;
+  nextPaceBlock();
+}
+
+function nextPaceBlock() {
+  const rate = TEST_RATES[paceTest.i];
+  pacerTo(paceFor(rate));
+  paceTest.t0 = app.pacer0;
+  paceTest.beats = [];
+  toast(`${rate} breaths a minute for 2 minutes. Follow the pacer gently.`);
+  renderPaceBar(0);
+}
+
+function renderPaceBar(el) {
+  const rate = TEST_RATES[paceTest.i];
+  const left = fmtClock(BLOCK_SEC - el);
+  const thin = el > SETTLE_SEC + 20 && paceTest.beats.length < (el - 5) * 0.5;
+  $('testInfo').textContent = `Find my pace · ${rate} / min · ${paceTest.i + 1} of ${TEST_RATES.length} · ${el < SETTLE_SEC ? 'settling in · ' : ''}${left}${thin ? ' · few beats, check the sensor' : ''}`;
+}
+
+function tickPaceTest() {
+  const el = now() - paceTest.t0;
+  if (el < BLOCK_SEC) { renderPaceBar(el); return; }
+  paceTest.results.push(analyseBlock(paceTest.beats, TEST_RATES[paceTest.i]));
+  paceTest.i++;
+  if (paceTest.i < TEST_RATES.length) nextPaceBlock();
+  else finishPaceTest();
+}
+
+function restorePace(prevPattern) {
+  setCustom(app.settings.custom);
+  applyCustom();
+  setPattern(prevPattern);
+}
+
+function stopPaceTestForManualPace() {
+  if (!paceTest) return;
+  const prev = paceTest.prevPattern;
+  paceTest = null;
+  $('testBar').hidden = true;
+  setCustom(app.settings.custom); applyCustom();
+  toast('You changed the pace, so the pace test stopped.');
+  void prev;
+}
+
+function cancelPaceTest() {
+  if (!paceTest) return;
+  const prev = paceTest.prevPattern;
+  paceTest = null;
+  $('testBar').hidden = true;
+  restorePace(prev);
+  toast('Pace test stopped.');
+}
+
+async function finishPaceTest() {
+  const t = paceTest;
+  paceTest = null;
+  $('testBar').hidden = true;
+  restorePace(t.prevPattern);
+  const rec = { at: new Date().toISOString(), device: t.device, approx: !!app.engine.approx, results: t.results, pick: pickResonance(t.results) };
+  app.paceTests.push(rec);
+  app.paceTests = app.paceTests.slice(-30);
+  store.set('paceTests', app.paceTests).catch(() => {});
+  if (app.session) app.session.paceResult = rec.pick ? rec.pick.best : null;
+  if (t.ownSession) await endSession();
+  openPanel('pacePanel');
+  renderPaceTests(rec);
+  $('paceResult').scrollIntoView({ block: 'nearest' });
+}
+
+function usePace(rate, longerOut) {
+  app.settings.custom = paceFor(rate, longerOut);
+  applyCustom();
+  setPattern(CUSTOM);
+  saveSettings();
+  toast(`Pacer set to ${PATTERNS[CUSTOM].name.replace('Custom · ', '')}.`);
+}
+
+function renderPaceTests(fresh) {
+  const last = fresh || app.paceTests[app.paceTests.length - 1];
+  let html = '';
+  if (last && fresh) {
+    const p = last.pick;
+    if (!p) html = '<div class="presult"><b>Not enough clean beats to decide.</b><span class="note">Sit still, check the sensor (the beat light should blink steadily), and try again.</span></div>';
+    else {
+      const max = Math.max(...p.ranked.map((r) => r.score));
+      const rows = TEST_RATES.map((rate) => {
+        const r = last.results.find((x) => x && x.rate === rate);
+        const sc = p.ranked.find((x) => x.rate === rate);
+        if (!r) return `<div class="prow"><span>${rate} / min</span><span class="bar"></span><span class="u">no data</span></div>`;
+        return `<div class="prow${rate === p.best ? ' best' : ''}"><b>${rate} / min</b><span class="bar"><i style="width:${((100 * sc.score) / max).toFixed(0)}%"></i></span><span class="u">±${(r.amp / 2).toFixed(1)} bpm · ${r.phase > 0 ? '+' : ''}${r.phase}°</span></div>`;
+      }).join('');
+      const even = paceFor(p.best), longer = paceFor(p.best, true);
+      const notes = [];
+      if (p.edge) notes.push(`Your best was at the ${p.best === Math.max(...TEST_RATES) ? 'fast' : 'slow'} end of the range, so your pace may lie a little beyond it. Try the sliders half a breath ${p.best === Math.max(...TEST_RATES) ? 'faster' : 'slower'} and see what feels easy.`);
+      if (p.close) notes.push(`${p.close} / min came out almost as well. Either is fine; pick the one that feels easier.`);
+      if (last.approx) notes.push('This came from a watch that sends heart rate only, which blurs the swing. Treat it as a rough guide.');
+      html = `<div class="presult"><span class="note">Your pace today</span><span class="big">${p.best} breaths a minute</span>
+        <div class="ptable">${rows}</div>
+        <span class="note">Bars: how strongly your heart rate swung in step with the breath (the swing in bpm, and when it peaked: near 0° means right at the end of the in-breath).</span>
+        ${notes.map((n) => `<span class="note">${esc(n)}</span>`).join('')}
+        <div class="btns"><button class="solo primary" data-usepace="${p.best},0">Use it: ${even.inS} in · ${even.outS} out</button><button class="solo" data-usepace="${p.best},1">Longer out: ${longer.inS} in · ${longer.outS} out</button></div></div>`;
+    }
+  }
+  $('paceResult').innerHTML = html;
+  const fmt = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  const hist = app.paceTests.filter((x) => x.pick).slice(-8).reverse();
+  $('paceHistory').innerHTML = hist.length ? `<div class="phist"><b>Earlier results</b>${hist.map((x) => `<span>${fmt.format(new Date(x.at))} · ${x.pick.best} / min · ${esc(x.device)}${x.approx ? ' · rough' : ''}</span>`).join('')}
+    <span>Retest every few weeks. Your pace can drift: in one small study it changed between two tests a week apart for 14 of 21 people.</span></div>` : '';
+}
+
+$('paceTestBtn').addEventListener('click', startPaceTest);
+$('testCancel').addEventListener('click', cancelPaceTest);
+$('paceResult').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-usepace]');
+  if (!b) return;
+  const [rate, longer] = b.dataset.usepace.split(',');
+  usePace(+rate, longer === '1');
+});
+
 // ---------------------------------------------------------------- tour
 const TOUR_SOURCES = [
   { id: 'camera', icon: '◉', title: 'Phone camera', line: 'Fingertip on the back camera, flashlight on.' },
@@ -973,6 +1129,15 @@ $('cues').addEventListener('change', (e) => {
   app.settings.cues = e.target.value; saveSettings();
   if (e.target.value !== 'off') { drone.ensure(); setTimeout(() => drone.cue('up', { to: 2, level: CUE_LEVEL[e.target.value] }), 60); }
 });
+$('haptic').addEventListener('change', (e) => {
+  app.settings.haptic = e.target.value; saveSettings();
+  if (e.target.value === 'off') haptics.stop();
+  else if (app.deviceId === 'camera') toast('Vibration stays off while the camera reads your pulse; it starts with any other heart source.');
+});
+$('hapticTaps').addEventListener('change', (e) => {
+  app.settings.hapticTaps = e.target.checked; saveSettings();
+  if (e.target.checked && canVibrate()) haptics.reward({ type: 'up', to: 1 }, now());
+});
 $('glowRule').addEventListener('change', (e) => { app.settings.glowRule = e.target.value; app.glow.setRule(e.target.value); saveSettings(); renderGlow(); });
 $('volume').addEventListener('input', (e) => { app.settings.volume = e.target.value / 100; drone.volume = app.settings.volume; saveSettings(); });
 $('exportBtn').addEventListener('click', async () => {
@@ -1009,6 +1174,7 @@ function openPanel(id, tab) {
   if (id === 'sensorPanel') { renderDevices(); drawWave(); }
   if (id === 'journalPanel') renderJournal();
   if (id === 'gamesPanel') renderGames();
+  if (id === 'pacePanel' && !paceTest) renderPaceTests();
   const first = $(id).querySelector('button');
   first && first.focus();
 }
@@ -1191,6 +1357,7 @@ new p5((p) => {
     }
     renderHud(br);
     renderBeatLight();
+    if (hapticsOn() && (app.settings.haptic === 'in' || app.settings.haptic === 'inout')) haptics.pacer(app.settings.haptic, br, t);
     if (app.deviceId === 'camera' && !$('sensorPanel').hidden) drawPpgTrace();
     renderTint(app.visual);
     drone.update(br.b, app.score == null ? null : app.visual);
@@ -1207,6 +1374,7 @@ async function loadAll() {
     app.settings = { ...DEFAULT_SETTINGS, ...(await store.get('settings', {})) };
     app.level = { ...initialLevelState(), ...(await store.get('level', {})) };
     app.sessions = await store.allSessions();
+    app.paceTests = (await store.get('paceTests', [])) || [];
     app.gameBest = await store.get('games', {}) || {};
   } catch (e) { /* first run or storage blocked */ }
   drone.volume = app.settings.volume;
@@ -1216,7 +1384,7 @@ async function loadAll() {
 }
 
 // Handy from the browser console, e.g. breathfield.app.level
-window.breathfield = { app, startSession, endSession, connect, enterGame, leaveGame, drone };
+window.breathfield = { app, startSession, endSession, connect, enterGame, leaveGame, drone, startPaceTest, get paceTest() { return paceTest; } };
 
 (async function start() {
   await loadAll();

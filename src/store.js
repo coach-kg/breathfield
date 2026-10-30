@@ -103,6 +103,7 @@ export async function exportAll() {
     settings: await get('settings', null),
     level: await get('level', null),
     games: await get('games', null),
+    paceTests: await get('paceTests', null),
     sessions: (await allSessions()).sort((a, b) => a.start.localeCompare(b.start)),
   };
 }
@@ -124,6 +125,11 @@ export async function importAll(data) {
     await set('level', data.level);
   }
   if (data.settings && !(await get('settings', null))) await set('settings', data.settings);
+  if (Array.isArray(data.paceTests)) {
+    const have = (await get('paceTests', [])) || [];
+    const seen = new Set(have.map((x) => x.at));
+    await set('paceTests', [...have, ...data.paceTests.filter((x) => x && x.at && !seen.has(x.at))].sort((a, b) => a.at.localeCompare(b.at)).slice(-30));
+  }
   if (data.games && typeof data.games === 'object') {
     const g = { ...(await get('games', {})) };
     for (const [k, v] of Object.entries(data.games)) {
