@@ -1,6 +1,8 @@
-// Haptics through the browser's vibration API (Android: Chrome, Samsung
-// Internet, Firefox). Desktop browsers and iPhone have no vibration, so
-// everything here quietly does nothing there.
+// Haptics through the browser's vibration API: Chromium browsers on Android
+// (Chrome, Samsung Internet, Brave, Edge). Firefox switched it off, and
+// desktop browsers and iPhones have none, so everything here quietly does
+// nothing there. There is no permission prompt: the page only needs one tap
+// first. Many phone motors barely move in under ~25 ms, hence the strengths.
 //
 // The motor is only on or off, so a smooth swell is made from pulse density:
 // soft ticks that come closer together through the inhale (and, if wanted,
@@ -10,14 +12,24 @@
 
 export const canVibrate = () => typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function';
 
-const TICK_MS = 14;
+export const STRENGTH = { gentle: 25, medium: 40, strong: 60 }; // tick length in ms
 const SLOW = 0.75, FAST = 0.2; // seconds between ticks at the start and end of a swell
 
 export function createHaptics() {
-  const st = { next: 0, kind: null, quietUntil: 0, lastTap: -1e9 };
+  const st = { next: 0, kind: null, quietUntil: 0, lastTap: -1e9, tick: STRENGTH.medium };
   const buzz = (p) => { try { navigator.vibrate(p); } catch (e) { /* not allowed yet */ } };
 
   return {
+    setStrength(name) { st.tick = STRENGTH[name] || STRENGTH.medium; },
+
+    /** A short sample on a button press. Returns what the browser said. */
+    test() {
+      if (!canVibrate()) return 'none';
+      let ok = false;
+      try { ok = navigator.vibrate([st.tick, 140, st.tick, 140, st.tick * 4]); } catch (e) { ok = false; }
+      return ok ? 'sent' : 'refused';
+    },
+
     /**
      * Call every frame. mode: off | in | inout. br: breathAt() result. now: seconds.
      * heart: optional { beat: true } on frames where a heartbeat tap is wanted.
@@ -29,7 +41,7 @@ export function createHaptics() {
         const turn = st.kind != null && (kind === 'in' || kind === 'out');
         st.kind = kind;
         if (turn && now >= st.quietUntil) {
-          if (kind === 'in' || mode === 'inout') buzz([22, 90, 22]);
+          if (kind === 'in' || mode === 'inout') buzz([st.tick + 8, 90, st.tick + 8]);
           st.next = now + 0.45;
           return;
         }
@@ -39,7 +51,7 @@ export function createHaptics() {
       if (kind === 'in') gap = SLOW + (FAST - SLOW) * br.p;             // denser toward full
       else if (kind === 'out' && mode === 'inout') gap = FAST + (SLOW - FAST) * br.p * 1.3; // thinning out
       if (gap == null || (kind === 'out' && br.p > 0.85)) return;       // quiet at the bottom and in holds
-      buzz(TICK_MS);
+      buzz(st.tick);
       st.next = now + gap;
     },
 
@@ -48,10 +60,12 @@ export function createHaptics() {
       if (!canVibrate() || document.hidden) return;
       if (now - st.lastTap < 8) return;
       let p = null;
-      if (e.type === 'up' && e.to === 2) p = [70, 110, 140];
-      else if (e.type === 'up') p = [120];
-      else if (e.type === 'held' && e.zone === 2) p = [160];
-      else if (e.type === 'milestone') p = [60, 90, 60, 90, 60];
+      const k = st.tick / STRENGTH.medium;
+      if (e.type === 'up' && e.to === 2) p = [80 * k, 110, 160 * k];
+      else if (e.type === 'up') p = [130 * k];
+      else if (e.type === 'held' && e.zone === 2) p = [180 * k];
+      else if (e.type === 'milestone') p = [70 * k, 90, 70 * k, 90, 70 * k];
+      if (p) p = p.map(Math.round);
       if (!p) return; // nothing for going down or for low
       st.lastTap = now;
       st.quietUntil = now + 0.9;
@@ -61,7 +75,7 @@ export function createHaptics() {
     /** A soft tap on a heartbeat, for feeling your own pulse. */
     heartbeat(now) {
       if (!canVibrate() || document.hidden || now < st.quietUntil) return;
-      buzz(18);
+      buzz(st.tick);
     },
 
     stop() { st.kind = null; if (canVibrate()) buzz(0); },

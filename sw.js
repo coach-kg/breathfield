@@ -1,6 +1,6 @@
 // Offline support: serve the app from cache when there is no network,
 // and refresh the cache whenever the network answers.
-const CACHE = 'breathfield-v4';
+const CACHE = 'breathfield-v5';
 const SHELL = [
   './', 'index.html', 'css/app.css', 'manifest.webmanifest', 'icon.svg',
   'src/main.js', 'src/store.js', 'src/audio.js', 'src/haptics.js',

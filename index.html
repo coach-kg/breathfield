@@ -53,21 +53,21 @@
 
   <footer class="dock" id="dock">
     <label class="sel" for="sceneSel"><span>Scene</span><select id="sceneSel"></select></label>
-    <button class="solo" id="playBtn" title="Games"><svg class="gpad" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8h10a4 4 0 0 1 4 4.5l-.6 3.6a2.2 2.2 0 0 1-3.9 1L15 15H9l-1.5 2.1a2.2 2.2 0 0 1-3.9-1L3 12.5A4 4 0 0 1 7 8z"/><path d="M8 11v3M6.5 12.5h3"/><circle cx="15.5" cy="11.5" r="0.6" fill="currentColor"/><circle cx="17" cy="13.5" r="0.6" fill="currentColor"/></svg><b id="playName">Play</b></button>
     <div class="sel" role="group" aria-label="Breathing">
       <label for="pat"><span>Breath</span></label><select id="pat"></select>
-      <button class="ico" id="paceBtn" aria-label="Adjust pace" title="Adjust pace"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
+      <button class="ico" id="paceBtn" aria-label="Adjust pace" data-tip="Adjust pace"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
     </div>
     <button class="solo" id="sensorBtn" title="Heart source"><svg class="sheart" id="sensorHeart" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.6a4.3 4.3 0 0 1 7.5 2.7c0 5.6-7.5 10.2-7.5 10.2z"/></svg><b id="sensorName">Practice</b></button>
     <span class="spacer"></span>
     <button class="solo primary" id="sessionBtn">Start session</button>
     <div class="grp icons" role="group" aria-label="Tools">
-      <button class="ico" id="journalBtn" aria-label="Journal" title="Journal (J)"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/></svg></button>
-      <button class="ico" id="settingsBtn" aria-label="Settings" title="Settings (,)"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg></button>
-      <button class="ico" id="sound" aria-pressed="false" aria-label="Sound" title="Sound"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4h3l5 4V6L7 10z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/></svg></button>
-      <button class="ico" id="guide" aria-pressed="true" aria-label="Guide" title="Guide (G)"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/></svg></button>
-      <button class="ico" id="helpBtn" aria-label="Tour" title="Tour (?)"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.6"/><circle cx="12" cy="17" r="0.6" fill="currentColor"/></svg></button>
-      <button class="ico" id="full" aria-label="Fullscreen" title="Fullscreen (F)"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      <button class="ico" id="playBtn" aria-label="Games" data-tip="Games: how they work, best scores"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8h10a4 4 0 0 1 4 4.5l-.6 3.6a2.2 2.2 0 0 1-3.9 1L15 15H9l-1.5 2.1a2.2 2.2 0 0 1-3.9-1L3 12.5A4 4 0 0 1 7 8z"/><path d="M8 11v3M6.5 12.5h3"/><circle cx="15.5" cy="11.5" r="0.6" fill="currentColor"/><circle cx="17" cy="13.5" r="0.6" fill="currentColor"/></svg></button>
+      <button class="ico" id="journalBtn" aria-label="Journal" data-tip="Journal (J)"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/></svg></button>
+      <button class="ico" id="settingsBtn" aria-label="Settings" data-tip="Settings (,)"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg></button>
+      <button class="ico" id="sound" aria-pressed="false" aria-label="Sound" data-tip="Sound"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4h3l5 4V6L7 10z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/></svg></button>
+      <button class="ico" id="guide" aria-pressed="true" aria-label="Guide" data-tip="Guide (G)"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/></svg></button>
+      <button class="ico" id="helpBtn" aria-label="Tour" data-tip="Tour (?)"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.6"/><circle cx="12" cy="17" r="0.6" fill="currentColor"/></svg></button>
+      <button class="ico" id="full" aria-label="Fullscreen" data-tip="Fullscreen (F)"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
     </div>
   </footer>
 </div>
@@ -172,8 +172,17 @@
           <option value="heart">Your heartbeat, a soft tap per beat</option>
         </select>
       </label>
+      <label class="field" for="hapticStrength"><span>Strength</span>
+        <select id="hapticStrength">
+          <option value="gentle">Gentle</option>
+          <option value="medium">Medium</option>
+          <option value="strong">Strong</option>
+        </select>
+      </label>
+      <div class="btns"><button class="solo" id="hapticTest">Test vibration</button></div>
+      <p class="note" id="hapticTestNote" hidden></p>
       <label class="check" for="hapticTaps"><input type="checkbox" id="hapticTaps"> A gentle tap when coherence climbs, after a minute in high, and every 100 glow</label>
-      <p class="note" id="hapticNote">Soft ticks that come closer together as you breathe in, with a double tap at each turn, for breathing with your eyes closed and the phone on your chest or in your hand. Android only (Chrome, Samsung Internet, Firefox): Macs and iPhones cannot vibrate from a web page. Always off while the phone camera reads your pulse, because the shaking would spoil the signal.</p>
+      <p class="note" id="hapticNote">Soft ticks that come closer together as you breathe in, with a double tap at each turn, for breathing with your eyes closed and the phone on your chest or in your hand. Android only, in Chrome, Samsung Internet, Brave or Edge. Firefox, Macs and iPhones cannot vibrate from a web page. There is no permission pop-up: browsers allow it after your first tap on the page. Always off while the phone camera reads your pulse, because the shaking would spoil the signal.</p>
       <h3>Graphics</h3>
       <label class="field" for="quality"><span>Quality</span>
         <select id="quality">
