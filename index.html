@@ -109,7 +109,8 @@
     <canvas id="padQr" width="400" height="400" aria-label="QR code for the pacer pad"></canvas>
     <p class="note" id="padLinkNote"></p>
     <div class="btns"><button class="solo" id="padCopy">Copy link</button></div>
-    <p class="note">The phone runs the same rhythm on its own; nothing is sent between the two. Both clocks keep internet time, so they stay within about a tenth of a second. If the buzz feels early or late, use the ±0.1 s buttons on the phone. If you change the pace here, scan again. Coherence taps stay on this device.</p>
+    <label class="check" for="padSync"><input type="checkbox" id="padSync" checked> Keep the phone following: pace changes and coherence taps reach it without scanning again</label>
+    <p class="note">The phone runs the same rhythm on its own clock; both keep internet time, so they stay within about a tenth of a second (the ±0.1 s buttons on the phone fix the rest). With following on, changes travel through ntfy.sh, a free public relay, under a random code: only the breathing pattern, its start time and the zone taps, nothing about you. Off: nothing leaves this device, and you scan again after changing the pace.</p>
   </div>
 </aside>
 

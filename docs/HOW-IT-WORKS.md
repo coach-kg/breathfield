@@ -115,8 +115,17 @@ is always off while the phone camera reads your pulse.
 **Pacer pad** (`pad.html`, `src/pad.js`): a computer cannot vibrate, so it shows a QR code
 with a link holding the breathing pattern and the wall-clock moment its pacer started
 (`pad.html#p=i4,o6&e=…`). The phone runs the same rhythm from that and vibrates with it; nothing
-is sent between the two. Both clocks keep internet time, so they agree within about 0.1 s, and
-±0.1 s buttons on the phone take care of the rest.
+is needed between the two for the rhythm itself. Both clocks keep internet time, so they agree
+within about 0.1 s, and ±0.1 s buttons on the phone take care of the rest.
+
+So the phone follows later pace changes (and gets the coherence taps) without a new scan, the
+computer posts them to a random topic on [ntfy.sh](https://ntfy.sh), a free public relay, and the
+phone listens (`src/relay.js`). Only the pattern, its start time and zone taps are sent. Turn
+*Keep the phone following* off in the Pacer pad panel to keep everything on the device.
+
+**Changing the pace** never restarts the breath: the new pattern picks up at the same depth,
+moving the same way (`matchPhase` in `src/engine/breath.js`). Only the pace test starts each rate
+fresh.
 
 ## Motion artifacts
 

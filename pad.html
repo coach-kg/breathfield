@@ -50,6 +50,8 @@
     <select id="mode" aria-label="Pattern"><option value="in">Swell while breathing in</option><option value="inout">Swell in, fade out</option></select>
     <select id="strength" aria-label="Strength"><option value="gentle">Gentle</option><option value="medium" selected>Medium</option><option value="strong">Strong</option></select>
   </div>
+  <label class="row note" for="taps"><input type="checkbox" id="taps" checked> Coherence taps from the computer</label>
+  <p class="note" id="link"></p>
   <div class="row nudge"><span class="note">Out of step?</span><button id="earlier" aria-label="Earlier by 0.1 second">−0.1 s</button><span id="offset">±0.0 s</span><button id="later" aria-label="Later by 0.1 second">+0.1 s</button></div>
 </footer>
 <script type="module" src="src/pad.js"></script>

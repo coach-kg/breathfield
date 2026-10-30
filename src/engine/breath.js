@@ -52,3 +52,25 @@ export function breathAt(t, i) {
   }
   return { kind: 'out', label: 'out', p: 0, b: 0, rem: 0, elapsed: 0, total, cyc: 0 };
 }
+
+/**
+ * Where to start pattern i so the switch feels seamless: the same breath depth,
+ * moving the same way. Breathing in at 60% → the point in the new pattern where
+ * you are breathing in at 60%. A hold maps to the new pattern's hold (or to the
+ * turn, if it has none). Returns seconds into the new pattern's cycle.
+ */
+export function matchPhase(br, i, n = 480) {
+  const total = cycleSec(i);
+  let best = 0, bestErr = Infinity;
+  for (let k = 0; k < n; k++) {
+    const t = (k / n) * total;
+    const nb = breathAt(t, i);
+    let err = Infinity;
+    if (br.kind === 'in' && nb.kind === 'in') err = Math.abs(nb.b - br.b);
+    else if (br.kind === 'out' && nb.kind === 'out') err = Math.abs(nb.b - br.b);
+    else if (br.kind === 'holdIn') err = nb.kind === 'holdIn' ? nb.p * 0.001 : nb.kind === 'in' ? 0.002 + (1 - nb.b) : Infinity;
+    else if (br.kind === 'holdOut') err = nb.kind === 'holdOut' ? nb.p * 0.001 : nb.kind === 'out' ? 0.002 + nb.b : Infinity;
+    if (err < bestErr) { bestErr = err; best = t; }
+  }
+  return best;
+}
