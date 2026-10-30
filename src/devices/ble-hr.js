@@ -19,6 +19,21 @@ export function parseHeartRateMeasurement(view) {
   return { hr, rr, contact: (flags & 0x06) === 0x06 ? true : (flags & 0x04 ? false : null) };
 }
 
+/**
+ * What kind of Bluetooth heart sensor this is, from its advertised name, and the
+ * model without the serial number ("Polar Unite A46B3A28" → watch, "Polar Unite").
+ * approx: it sent heart rate without beat intervals, which watches usually do.
+ */
+export function describeBle(name = '', approx = false) {
+  const model = name.replace(/\s+[0-9A-F]{6,}$/i, '').replace(/\s*\(.*\)$/, '').trim();
+  let kind = 'bluetooth';
+  if (/verity|\boh1\b|rhythm|armband|whoop|scosche/i.test(name)) kind = 'armband';
+  else if (/\bh10\b|\bh9\b|\bh7\b|\bh6\b|hrm|tickr|strap|chest|coospo|magene|moofit|\bdual\b/i.test(name)) kind = 'strap';
+  else if (/watch|unite|ignite|vantage|grit|pacer|forerunner|f[eē]nix|venu|vivo|epix|instinct|amazfit|\bgtr\b|\bgts\b|band|fitbit|versa|charge|coros|suunto|galaxy|gear|pixel/i.test(name)) kind = 'watch';
+  else if (approx) kind = 'watch';
+  return { kind, model: model.length > 18 ? `${model.slice(0, 17)}…` : model };
+}
+
 export class BleHeartRate extends Device {
   /** showAll: list every nearby device, for watches that do not advertise the heart-rate service. */
   constructor({ showAll = false } = {}) {

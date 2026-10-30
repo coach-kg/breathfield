@@ -14,7 +14,7 @@ import { badgeGlyph } from './visuals/badges.js';
 import { GAMES, gameById } from './games/index.js';
 import { banner } from './games/common.js';
 import { PracticeKeys, DemoSensor } from './devices/simulated.js';
-import { BleHeartRate } from './devices/ble-hr.js';
+import { BleHeartRate, describeBle } from './devices/ble-hr.js';
 import { EmWaveHid } from './devices/emwave-hid.js';
 import { CameraPpg } from './devices/camera-ppg.js';
 
@@ -78,7 +78,7 @@ const DEVICES = [
   { id: 'practice', cls: PracticeKeys, make: () => new PracticeKeys({ holding: () => app.holding, lastInput: () => app.lastInput }),
     title: 'Practice without a sensor', short: 'Practice', tag: 'always works',
     desc: 'Hold space, or press and hold the screen, while you breathe in, and let go as you breathe out. Breathing evenly with the pacer builds coherence. Counts for streaks, not for rank.' },
-  { id: 'ble', cls: BleHeartRate, title: 'Bluetooth heart-rate strap', short: 'Strap', tag: 'most accurate', good: true,
+  { id: 'ble', cls: BleHeartRate, title: 'Bluetooth heart-rate strap', short: 'Bluetooth', tag: 'most accurate', good: true,
     desc: 'Polar H10, Garmin HRM, Wahoo TICKR or any strap that sends beat intervals. Chrome or Edge.' },
   { id: 'bleAll', cls: BleHeartRate, make: () => new BleHeartRate({ showAll: true }), hidden: true, title: 'Bluetooth (all devices)', short: 'Bluetooth' },
   { id: 'emwave', cls: EmWaveHid, title: 'emWave 2 (USB)', short: 'emWave', tag: 'read-only', good: true,
@@ -369,7 +369,16 @@ function renderStatus() {
   el.textContent = dev ? dev.text || dev.label : 'No heart source';
   el.dataset.state = dev ? dev.state : 'off';
   const def = DEVICES.find((d) => d.id === app.deviceId);
-  $('sensorName').textContent = def ? def.short : 'No sensor';
+  let short = def ? def.short : 'No sensor', tip = def ? def.title : '';
+  if (dev && dev.btDevice && (app.deviceId === 'ble' || app.deviceId === 'bleAll')) {
+    // Name the actual device: "Polar Unite" (a watch) rather than a generic "Strap".
+    const d = describeBle(dev.btDevice.name || '', !!dev.approx);
+    const kind = { watch: 'Watch', strap: 'Strap', armband: 'Armband', bluetooth: 'Bluetooth' }[d.kind];
+    short = d.model || kind;
+    tip = `${kind}${dev.approx ? ', heart rate only' : ', beat to beat'}`;
+  }
+  $('sensorName').textContent = short;
+  $('sensorBtn').title = tip;
   $('sensorHeart').dataset.state = dev ? dev.state : 'off';
   if (!$('sensorPanel').hidden) renderDevices();
 }
@@ -727,20 +736,65 @@ function setPattern(i) {
   $('pat').value = String(i);
   $('rate').textContent = perMinute(i).toFixed(1);
   saveSettings();
+  if (!$('padPanel').hidden) renderPad();
 }
 
-// Scenes and games share the picker; games are the second group.
-$('sceneSel').innerHTML = `<optgroup label="Scenes">${SCENES.map((s, i) => `<option value="${i}">${s.name}</option>`).join('')}</optgroup>`
-  + `<optgroup label="Games">${GAMES.filter((g) => !g.soon).map((g) => `<option value="g:${g.id}">${g.name}</option>`).join('')}</optgroup>`;
+// ---------------------------------------------------------------- pacer pad
+// A link for the phone with the pattern and the wall-clock moment the pacer
+// started; the phone (pad.html) runs the same rhythm and vibrates with it.
+
+function padLink() {
+  const steps = PATTERNS[app.settings.pattern].steps.map(([k, d]) => `${k[0]}${+d.toFixed(2)}`).join(',');
+  const epoch = Math.round(Date.now() - (now() - app.pacer0) * 1000);
+  // A phone cannot reach this computer's own address, so local copies point at the public site.
+  const base = /github\.io$/.test(location.hostname) ? new URL('pad.html', location.href).href : 'https://coach-kg.github.io/breathfield/pad.html';
+  return `${base}#p=${steps}&e=${epoch}`;
+}
+
+let qrLib = null;
+function loadQr() {
+  if (window.qrcode) return Promise.resolve(window.qrcode);
+  if (!qrLib) {
+    qrLib = new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
+      s.onload = () => res(window.qrcode);
+      s.onerror = () => { qrLib = null; rej(new Error('QR library did not load')); };
+      document.head.appendChild(s);
+    });
+  }
+  return qrLib;
+}
+
+async function renderPad() {
+  const link = padLink();
+  $('padLinkNote').textContent = link;
+  const c = $('padQr'), x = c.getContext('2d');
+  try {
+    const qrcode = await loadQr();
+    const qr = qrcode(0, 'M');
+    qr.addData(link);
+    qr.make();
+    const n = qr.getModuleCount(), cell = Math.floor(c.width / n), off = Math.floor((c.width - cell * n) / 2);
+    x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+    x.fillStyle = '#06050a';
+    for (let r = 0; r < n; r++) for (let k = 0; k < n; k++) if (qr.isDark(r, k)) x.fillRect(off + k * cell, off + r * cell, cell, cell);
+  } catch (e) {
+    x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+    $('padLinkNote').textContent = `The QR code needs a connection the first time. Open this link on the phone instead: ${link}`;
+  }
+}
+document.querySelectorAll('[data-open-pad]').forEach((b) => b.addEventListener('click', () => openPanel('padPanel')));
+$('padCopy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(padLink()); toast('Link copied. Send it to your phone and open it there.'); } catch (e) { toast('Copy did not work here; select the link text instead.'); }
+});
+
+$('sceneSel').innerHTML = SCENES.map((s, i) => `<option value="${i}">${s.name}</option>`).join('');
 $('pat').innerHTML = PATTERNS.map((p, i) => `<option value="${i}">${p.name}</option>`).join('');
 $('manualRank').innerHTML = RANKS.map((r, i) => `<option value="${i}">${r.name}</option>`).join('');
 
-$('sceneSel').addEventListener('change', (e) => {
-  const v = e.target.value;
-  if (v.startsWith('g:')) { enterGame(v.slice(2)); return; }
-  if (app.game) leaveGame();
-  setScene(+v);
-});
+// During a game the scene picker changes the dimmed scene behind it.
+$('sceneSel').addEventListener('change', (e) => setScene(+e.target.value));
 $('pat').addEventListener('change', (e) => { stopPaceTestForManualPace(); setPattern(+e.target.value); });
 $('paceBtn').addEventListener('click', () => openPanel('pacePanel'));
 function onPaceInput() {
@@ -801,7 +855,6 @@ function enterGame(id) {
   $('gameBar').hidden = false;
   $('gameTitle').textContent = def.name;
   $('gamePause').setAttribute('aria-pressed', 'false');
-  $('sceneSel').value = `g:${id}`;
   $('playBtn').setAttribute('aria-pressed', 'true');
   updateBreathPad();
   if (app.session) { app.session.games.add(id); toast(`${def.name}. Your session keeps recording.`); }
@@ -832,7 +885,6 @@ function leaveGame(switching = false) {
   if (switching) return;
   document.body.classList.remove('gaming');
   $('gameBar').hidden = true;
-  $('sceneSel').value = String(app.settings.scene);
   $('playBtn').setAttribute('aria-pressed', 'false');
   updateBreathPad();
   scenes && scenes.clear();
@@ -1186,17 +1238,18 @@ function showTab(name) {
 }
 
 function openPanel(id, tab) {
-  ['sensorPanel', 'journalPanel', 'pacePanel', 'gamesPanel'].forEach((p) => { $(p).hidden = p !== id; });
+  ['sensorPanel', 'journalPanel', 'pacePanel', 'gamesPanel', 'padPanel'].forEach((p) => { $(p).hidden = p !== id; });
   if (tab) showTab(tab);
   ui.classList.remove('idle');
   if (id === 'sensorPanel') { renderDevices(); drawWave(); }
   if (id === 'journalPanel') renderJournal();
   if (id === 'gamesPanel') renderGames();
+  if (id === 'padPanel') renderPad();
   if (id === 'pacePanel' && !paceTest) renderPaceTests();
   const first = $(id).querySelector('button');
   first && first.focus();
 }
-function closePanels() { ['sensorPanel', 'journalPanel', 'pacePanel', 'gamesPanel'].forEach((p) => { $(p).hidden = true; }); }
+function closePanels() { ['sensorPanel', 'journalPanel', 'pacePanel', 'gamesPanel', 'padPanel'].forEach((p) => { $(p).hidden = true; }); }
 document.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => { $(b.dataset.close).hidden = true; }));
 
 let toastTimer = 0;
@@ -1210,7 +1263,7 @@ function toast(msg) {
 // Fade the controls while you breathe.
 const ui = $('ui');
 let idleTimer = 0;
-const panelOpen = () => !$('sensorPanel').hidden || !$('journalPanel').hidden || !$('pacePanel').hidden || !$('gamesPanel').hidden || !$('summary').hidden || !$('tour').hidden;
+const panelOpen = () => !$('sensorPanel').hidden || !$('journalPanel').hidden || !$('pacePanel').hidden || !$('gamesPanel').hidden || !$('padPanel').hidden || !$('summary').hidden || !$('tour').hidden;
 function poke() {
   ui.classList.remove('idle');
   clearTimeout(idleTimer);
@@ -1252,7 +1305,7 @@ addEventListener('keydown', (e) => {
   if (e.key === '?' ) { openTour(); return; }
   if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === 'Enter' && tag !== 'BUTTON') { app.session ? endSession() : startSession(); return; }
-  if (e.key >= '1' && e.key <= String(SCENES.length)) { if (app.game) leaveGame(); setScene(+e.key - 1); }
+  if (e.key >= '1' && e.key <= String(SCENES.length)) setScene(+e.key - 1);
   else if (e.key === ',') openPanel('journalPanel', 'settings');
   else if (e.key === 'h' || e.key === 'H') ui.classList.toggle('bare');
   else if (e.key === 'g' || e.key === 'G') $('guide').click();

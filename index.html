@@ -61,7 +61,7 @@
     <span class="spacer"></span>
     <button class="solo primary" id="sessionBtn">Start session</button>
     <div class="grp icons" role="group" aria-label="Tools">
-      <button class="ico" id="playBtn" aria-label="Games" data-tip="Games: how they work, best scores"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8h10a4 4 0 0 1 4 4.5l-.6 3.6a2.2 2.2 0 0 1-3.9 1L15 15H9l-1.5 2.1a2.2 2.2 0 0 1-3.9-1L3 12.5A4 4 0 0 1 7 8z"/><path d="M8 11v3M6.5 12.5h3"/><circle cx="15.5" cy="11.5" r="0.6" fill="currentColor"/><circle cx="17" cy="13.5" r="0.6" fill="currentColor"/></svg></button>
+      <button class="ico" id="playBtn" aria-label="Games" data-tip="Play"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8h10a4 4 0 0 1 4 4.5l-.6 3.6a2.2 2.2 0 0 1-3.9 1L15 15H9l-1.5 2.1a2.2 2.2 0 0 1-3.9-1L3 12.5A4 4 0 0 1 7 8z"/><path d="M8 11v3M6.5 12.5h3"/><circle cx="15.5" cy="11.5" r="0.6" fill="currentColor"/><circle cx="17" cy="13.5" r="0.6" fill="currentColor"/></svg></button>
       <button class="ico" id="journalBtn" aria-label="Journal" data-tip="Journal (J)"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/></svg></button>
       <button class="ico" id="settingsBtn" aria-label="Settings" data-tip="Settings (,)"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg></button>
       <button class="ico" id="sound" aria-pressed="false" aria-label="Sound" data-tip="Sound"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4h3l5 4V6L7 10z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/></svg></button>
@@ -99,6 +99,20 @@
   </div>
 </aside>
 
+<aside class="panel" id="padPanel" hidden aria-labelledby="padTitle">
+  <div class="panel-head">
+    <h2 id="padTitle">Pacer pad</h2>
+    <button class="x" data-close="padPanel" aria-label="Close">Close</button>
+  </div>
+  <div class="panel-body">
+    <p class="lede">Feel the pacer on your Android phone while you watch this screen. Scan the code with the phone's camera, tap <b>Start vibrating</b>, and lay the phone on your chest or hold it.</p>
+    <canvas id="padQr" width="400" height="400" aria-label="QR code for the pacer pad"></canvas>
+    <p class="note" id="padLinkNote"></p>
+    <div class="btns"><button class="solo" id="padCopy">Copy link</button></div>
+    <p class="note">The phone runs the same rhythm on its own; nothing is sent between the two. Both clocks keep internet time, so they stay within about a tenth of a second. If the buzz feels early or late, use the ±0.1 s buttons on the phone. If you change the pace here, scan again. Coherence taps stay on this device.</p>
+  </div>
+</aside>
+
 <aside class="panel" id="pacePanel" hidden aria-labelledby="paceTitle">
   <div class="panel-head">
     <h2 id="paceTitle">Breathing pace</h2>
@@ -117,6 +131,7 @@
       <button class="solo" data-preset="5,0,6,0">5.5 / min</button>
       <button class="solo" data-preset="5,0,7,0">5 / min</button>
     </div>
+    <div class="btns"><button class="solo" data-open-pad>Feel it on your phone</button></div>
     <h3>Find my pace</h3>
     <p class="note">Everyone has a breathing rate where the heart rate swings the most, usually between 4.5 and 6.5 breaths a minute. This test paces five rates for 2 minutes each (10 minutes) and compares how much your heart follows. Sit still, breathe gently through your nose and follow the pacer. Best with the emWave or a chest strap; it counts as a session.</p>
     <button class="solo primary" id="paceTestBtn">Start the 10-minute test</button>
@@ -179,7 +194,7 @@
           <option value="strong">Strong</option>
         </select>
       </label>
-      <div class="btns"><button class="solo" id="hapticTest">Test vibration</button></div>
+      <div class="btns"><button class="solo" id="hapticTest">Test vibration</button><button class="solo" data-open-pad>Phone as pacer pad</button></div>
       <p class="note" id="hapticTestNote" hidden></p>
       <label class="check" for="hapticTaps"><input type="checkbox" id="hapticTaps"> A gentle tap when coherence climbs, after a minute in high, and every 100 glow</label>
       <p class="note" id="hapticNote">Soft ticks that come closer together as you breathe in, with a double tap at each turn, for breathing with your eyes closed and the phone on your chest or in your hand. Android only, in Chrome, Samsung Internet, Brave or Edge. Firefox, Macs and iPhones cannot vibrate from a web page. There is no permission pop-up: browsers allow it after your first tap on the page. Always off while the phone camera reads your pulse, because the shaking would spoil the signal.</p>
