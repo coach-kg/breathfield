@@ -48,6 +48,7 @@
     <button class="solo" id="gamePause" aria-pressed="false">Pause</button>
     <button class="solo" id="gameExit">Leave game</button>
   </div>
+  <div class="testbar" id="testBar" hidden><span id="testInfo">Finding your pace</span><button class="solo" id="testCancel">Stop test</button></div>
   <button class="breathpad" id="breathPad" hidden aria-label="Hold while breathing in">hold<br>while<br>in</button>
 
   <footer class="dock" id="dock">
@@ -106,9 +107,9 @@
   <div class="panel-body">
     <p class="lede">Set your own timing. Changes apply straight away. Many people settle best somewhere between 4.5 and 7 breaths a minute, often with a slightly longer exhale.</p>
     <div class="pace-rate"><b id="paceRate">6.0</b><span>breaths a minute</span></div>
-    <label class="field" for="inS"><span>Breathe in · <output id="inSV">5</output> s</span><input type="range" id="inS" min="2" max="10" step="0.5" value="5"></label>
+    <label class="field" for="inS"><span>Breathe in · <output id="inSV">5</output> s</span><input type="range" id="inS" min="2" max="10" step="0.1" value="5"></label>
     <label class="field" for="holdIn"><span>Hold after in · <output id="holdInV">0</output> s</span><input type="range" id="holdIn" min="0" max="10" step="0.5" value="0"></label>
-    <label class="field" for="outS"><span>Breathe out · <output id="outSV">5</output> s</span><input type="range" id="outS" min="2" max="14" step="0.5" value="5"></label>
+    <label class="field" for="outS"><span>Breathe out · <output id="outSV">5</output> s</span><input type="range" id="outS" min="2" max="14" step="0.1" value="5"></label>
     <label class="field" for="holdOut"><span>Hold after out · <output id="holdOutV">0</output> s</span><input type="range" id="holdOut" min="0" max="10" step="0.5" value="0"></label>
     <div class="btns">
       <button class="solo" data-preset="5,0,5,0">6 / min even</button>
@@ -116,6 +117,11 @@
       <button class="solo" data-preset="5,0,6,0">5.5 / min</button>
       <button class="solo" data-preset="5,0,7,0">5 / min</button>
     </div>
+    <h3>Find my pace</h3>
+    <p class="note">Everyone has a breathing rate where the heart rate swings the most, usually between 4.5 and 6.5 breaths a minute. This test paces five rates for 2 minutes each (10 minutes) and compares how much your heart follows. Sit still, breathe gently through your nose and follow the pacer. Best with the emWave or a chest strap; it counts as a session.</p>
+    <button class="solo primary" id="paceTestBtn">Start the 10-minute test</button>
+    <div id="paceResult"></div>
+    <div id="paceHistory"></div>
   </div>
 </aside>
 
@@ -157,6 +163,17 @@
         </select>
       </label>
       <p class="note">The Guide button and <kbd>G</kbd> step through the text options.</p>
+      <h3>Haptics</h3>
+      <label class="field" for="haptic"><span>Vibration</span>
+        <select id="haptic">
+          <option value="off">Off</option>
+          <option value="in">Pacer: swell while breathing in</option>
+          <option value="inout">Pacer: swell in, fade out</option>
+          <option value="heart">Your heartbeat, a soft tap per beat</option>
+        </select>
+      </label>
+      <label class="check" for="hapticTaps"><input type="checkbox" id="hapticTaps"> A gentle tap when coherence climbs, after a minute in high, and every 100 glow</label>
+      <p class="note" id="hapticNote">Soft ticks that come closer together as you breathe in, with a double tap at each turn, for breathing with your eyes closed and the phone on your chest or in your hand. Android only (Chrome, Samsung Internet, Firefox): Macs and iPhones cannot vibrate from a web page. Always off while the phone camera reads your pulse, because the shaking would spoil the signal.</p>
       <h3>Graphics</h3>
       <label class="field" for="quality"><span>Quality</span>
         <select id="quality">

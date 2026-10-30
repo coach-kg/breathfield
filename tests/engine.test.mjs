@@ -254,3 +254,34 @@ test('coherence: heart-rate-only sources are scored at the pacer, not at slow dr
   assert.ok(run(true, true).score > run(true, false).score + 15, 'and rewards following the breath');
   assert.ok(Math.abs(run(true, true).peakHz - 0.1) < 0.02);
 });
+
+// ---------------------------------------------------------------- resonance pace test
+import { analyseBlock, pickResonance, paceFor, TEST_RATES, BLOCK_SEC } from '../src/engine/resonance.js';
+
+/** Beats from a heart whose breathing swing peaks at `rf` breaths/min. */
+function resonantHeart(rate, rf, { noise = 0.6, lagPerBreath = 35, seed = 1 } = {}) {
+  let s = seed; const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647 - 0.5);
+  const w = (2 * Math.PI * rate) / 60;
+  const amp = 14 * Math.exp(-(((rate - rf) / 0.9) ** 2)) + 2;    // swing in bpm
+  const phi = Math.PI + ((rate - rf) * lagPerBreath * Math.PI) / 180; // peak near end of inhale at rf
+  const beats = []; let t = 0;
+  while (t < BLOCK_SEC + 3) {
+    const hr = 64 + (amp / 2) * Math.cos(w * t - phi) + noise * rnd() * 4 + 0.01 * t;
+    const ibi = 60000 / hr; t += ibi / 1000; beats.push([t, ibi]);
+  }
+  return beats;
+}
+
+test('pace test: finds the rate where the heart swings most', () => {
+  for (const rf of [4.5, 5, 5.5, 6, 6.5]) {
+    const res = TEST_RATES.map((r) => analyseBlock(resonantHeart(r, rf, { seed: Math.round(r * 10) }), r));
+    const pick = pickResonance(res);
+    assert.equal(pick.best, rf, `expected ${rf}, got ${pick.best} ${JSON.stringify(pick.ranked)}`);
+  }
+  const at = analyseBlock(resonantHeart(5.5, 5.5), 5.5);
+  assert.ok(Math.abs(at.phase) < 25, `phase ${at.phase}`);
+  assert.ok(at.amp > 12 && at.fit > 0.6);
+  assert.equal(analyseBlock([[40, 900], [41, 900]], 6), null, 'too few beats');
+  assert.deepEqual(paceFor(5.5), { inS: 5.5, holdIn: 0, outS: 5.4, holdOut: 0 });
+  assert.deepEqual(paceFor(6, true), { inS: 4.5, holdIn: 0, outS: 5.5, holdOut: 0 });
+});

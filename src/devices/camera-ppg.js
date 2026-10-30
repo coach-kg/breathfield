@@ -84,6 +84,7 @@ export class CameraPpg extends Device {
     this.trace = [];
     this.finger = false;
     this.running = true;
+    this.watchMotion();
     this.status(this.torch
       ? `Light on${this.autoPicked ? ` (picked ${this.lens}, the lens next to the flashlight)` : ''}. Rest your fingertip gently over the lens and the light.`
       : this.front
@@ -92,6 +93,31 @@ export class CameraPpg extends Device {
           ? 'Could not switch the light on. Cover the lens with your fingertip and hold the phone toward a bright lamp.'
           : 'No lens offered light control in this browser (Firefox never does). Hold the phone toward a bright lamp, or try Chrome or Samsung Internet.', this.torch ? 'busy' : 'warn');
     this.loop();
+  }
+
+  /**
+   * Motion artifacts: a moving fingertip squeezes or shifts on the lens and
+   * makes fake pulses. The phone's motion sensor tells us when that happens,
+   * so beats in or right after movement are marked and left out of the score.
+   */
+  watchMotion() {
+    this.movedAt = -1e9; this.motionSensor = false; this.motionLevel = 0;
+    let prev = null;
+    this._onMotion = (e) => {
+      this.motionSensor = true;
+      let m;
+      const a = e.acceleration;
+      if (a && a.x != null) m = Math.hypot(a.x, a.y, a.z);
+      else {
+        const g = e.accelerationIncludingGravity;
+        if (!g || g.x == null) return;
+        m = prev ? Math.hypot(g.x - prev.x, g.y - prev.y, g.z - prev.z) * 4 : 0;
+        prev = { x: g.x, y: g.y, z: g.z };
+      }
+      this.motionLevel = this.motionLevel * 0.9 + m * 0.1;
+      if (m > 0.8) this.movedAt = e.timeStamp / 1000;
+    };
+    try { window.addEventListener('devicemotion', this._onMotion); } catch (e) { /* no sensor */ }
   }
 
   loop() {
@@ -122,7 +148,15 @@ export class CameraPpg extends Device {
       if (finger) {
         this.emit('pulse', { t, v: -r });
         const beat = this.detector.push(t, r);
-        if (beat) this.emit('beat', beat);
+        if (beat) {
+          // the beat interval spans the previous beat too, so movement anywhere in it counts
+          if (t - this.movedAt < beat.ibi / 1000 + 0.3) {
+            beat.moved = true;
+            this.movedBeats = (this.movedBeats || 0) + 1;
+            if (this.movedBeats % 4 === 1) this.status('Movement: those beats are left out. Rest your hand and hold still.', 'warn');
+          } else if (this.movedBeats) { this.movedBeats = 0; this.status('Still again. Counting beats.', 'on'); }
+          this.emit('beat', beat);
+        }
       }
     } catch (e) { /* frame not ready */ }
     this._next();
@@ -165,6 +199,7 @@ export class CameraPpg extends Device {
 
   async disconnect() {
     this.running = false;
+    try { window.removeEventListener('devicemotion', this._onMotion); } catch (e) { /* ignore */ }
     try {
       if (this.torch) await this.track.applyConstraints({ advanced: [{ torch: false }] });
     } catch (e) { /* ignore */ }
