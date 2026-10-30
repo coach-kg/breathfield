@@ -38,7 +38,7 @@ const now = () => performance.now() / 1000;
 const motion = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.45 : 1;
 
 const DEFAULT_SETTINGS = { scene: 0, pattern: 0, guideMode: 'full', guideStyle: 'ring', volume: 0.6, sessionMin: 10, rollover: 3, device: 'practice', colours: 'own',
-  coherenceTint: 'soft', cues: 'soft', glowRule: 'classic', haptic: 'off', hapticTaps: false, onboarded: false, quality: 'auto', screenLight: false, palette: 'classic', custom: { inS: 5, holdIn: 0, outS: 5, holdOut: 0 } };
+  coherenceTint: 'soft', cues: 'soft', glowRule: 'classic', haptic: 'off', hapticTaps: false, hapticStrength: 'medium', onboarded: false, quality: 'auto', screenLight: false, palette: 'classic', custom: { inS: 5, holdIn: 0, outS: 5, holdOut: 0 } };
 
 const app = {
   settings: { ...DEFAULT_SETTINGS },
@@ -671,9 +671,11 @@ async function renderSettings() {
   $('volume').value = String(Math.round(app.settings.volume * 100));
   $('cues').value = app.settings.cues;
   $('haptic').value = app.settings.haptic;
+  $('hapticStrength').value = app.settings.hapticStrength;
+  $('hapticStrength').disabled = $('hapticTest').disabled = !canVibrate();
   $('hapticTaps').checked = app.settings.hapticTaps;
   $('haptic').disabled = $('hapticTaps').disabled = !canVibrate();
-  if (!canVibrate()) $('hapticNote').textContent = 'This browser or device cannot vibrate from a web page (Macs, iPhones and desktop browsers can\'t). On an Android phone in Chrome, Samsung Internet or Firefox you can turn on a breathing pacer you feel, a soft tap per heartbeat, and gentle taps when coherence climbs.';
+  if (!canVibrate()) $('hapticNote').textContent = 'This browser cannot vibrate from a web page (Firefox, Safari, iPhones and desktop browsers can\'t). On an Android phone in Chrome, Samsung Internet, Brave or Edge you can turn on a breathing pacer you feel, a soft tap per heartbeat, and gentle taps when coherence climbs.';
   $('glowRule').value = app.settings.glowRule;
   $('backupBtn').hidden = !store.canBackupToFile();
   const persistent = await store.isPersistent();
@@ -727,11 +729,18 @@ function setPattern(i) {
   saveSettings();
 }
 
-$('sceneSel').innerHTML = SCENES.map((s, i) => `<option value="${i}">${s.name}</option>`).join('');
+// Scenes and games share the picker; games are the second group.
+$('sceneSel').innerHTML = `<optgroup label="Scenes">${SCENES.map((s, i) => `<option value="${i}">${s.name}</option>`).join('')}</optgroup>`
+  + `<optgroup label="Games">${GAMES.filter((g) => !g.soon).map((g) => `<option value="g:${g.id}">${g.name}</option>`).join('')}</optgroup>`;
 $('pat').innerHTML = PATTERNS.map((p, i) => `<option value="${i}">${p.name}</option>`).join('');
 $('manualRank').innerHTML = RANKS.map((r, i) => `<option value="${i}">${r.name}</option>`).join('');
 
-$('sceneSel').addEventListener('change', (e) => setScene(+e.target.value));
+$('sceneSel').addEventListener('change', (e) => {
+  const v = e.target.value;
+  if (v.startsWith('g:')) { enterGame(v.slice(2)); return; }
+  if (app.game) leaveGame();
+  setScene(+v);
+});
 $('pat').addEventListener('change', (e) => { stopPaceTestForManualPace(); setPattern(+e.target.value); });
 $('paceBtn').addEventListener('click', () => openPanel('pacePanel'));
 function onPaceInput() {
@@ -792,8 +801,8 @@ function enterGame(id) {
   $('gameBar').hidden = false;
   $('gameTitle').textContent = def.name;
   $('gamePause').setAttribute('aria-pressed', 'false');
-  $('playName').textContent = def.name;
-  $('playBtn').classList.add('on');
+  $('sceneSel').value = `g:${id}`;
+  $('playBtn').setAttribute('aria-pressed', 'true');
   updateBreathPad();
   if (app.session) { app.session.games.add(id); toast(`${def.name}. Your session keeps recording.`); }
   else { startSession(); app.session.games.add(id); toast(`${def.name}. Session started; it counts like any other.`); }
@@ -823,8 +832,8 @@ function leaveGame(switching = false) {
   if (switching) return;
   document.body.classList.remove('gaming');
   $('gameBar').hidden = true;
-  $('playName').textContent = 'Play';
-  $('playBtn').classList.remove('on');
+  $('sceneSel').value = String(app.settings.scene);
+  $('playBtn').setAttribute('aria-pressed', 'false');
   updateBreathPad();
   scenes && scenes.clear();
 }
@@ -1071,7 +1080,7 @@ const GUIDE_LABELS = { full: 'Guide', numbers: 'Guide: seconds', none: 'Guide: q
 function applyGuide() {
   const { guideMode: m, guideStyle: s } = app.settings;
   const b = $('guide');
-  b.title = `${GUIDE_LABELS[m]} (G)`;
+  b.dataset.tip = `${GUIDE_LABELS[m]} (G)`;
   b.setAttribute('aria-label', GUIDE_LABELS[m]);
   b.dataset.mode = m;
   b.setAttribute('aria-pressed', String(m !== 'off'));
@@ -1133,6 +1142,15 @@ $('haptic').addEventListener('change', (e) => {
   app.settings.haptic = e.target.value; saveSettings();
   if (e.target.value === 'off') haptics.stop();
   else if (app.deviceId === 'camera') toast('Vibration stays off while the camera reads your pulse; it starts with any other heart source.');
+});
+$('hapticStrength').addEventListener('change', (e) => { app.settings.hapticStrength = e.target.value; haptics.setStrength(e.target.value); saveSettings(); haptics.test(); });
+$('hapticTest').addEventListener('click', () => {
+  const r = haptics.test();
+  const n = $('hapticTestNote');
+  n.hidden = false;
+  n.textContent = r === 'none' ? 'This browser has no vibration at all.'
+    : r === 'refused' ? 'The browser refused. Tap anywhere on the page once and try again; in Brave, also try turning Shields off for this site.'
+    : 'Sent: three taps and a longer buzz. Felt nothing? On the phone: turn off silent and Do not disturb, raise Settings → Sounds and vibration → Vibration intensity (touch and notification feedback), and switch off power saving. Then try Strong. In Brave, try Shields off for this site.';
 });
 $('hapticTaps').addEventListener('change', (e) => {
   app.settings.hapticTaps = e.target.checked; saveSettings();
@@ -1234,7 +1252,7 @@ addEventListener('keydown', (e) => {
   if (e.key === '?' ) { openTour(); return; }
   if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === 'Enter' && tag !== 'BUTTON') { app.session ? endSession() : startSession(); return; }
-  if (e.key >= '1' && e.key <= String(SCENES.length)) setScene(+e.key - 1);
+  if (e.key >= '1' && e.key <= String(SCENES.length)) { if (app.game) leaveGame(); setScene(+e.key - 1); }
   else if (e.key === ',') openPanel('journalPanel', 'settings');
   else if (e.key === 'h' || e.key === 'H') ui.classList.toggle('bare');
   else if (e.key === 'g' || e.key === 'G') $('guide').click();
@@ -1379,6 +1397,7 @@ async function loadAll() {
   } catch (e) { /* first run or storage blocked */ }
   drone.volume = app.settings.volume;
   app.glow.setRule(app.settings.glowRule);
+  haptics.setStrength(app.settings.hapticStrength);
   app.badges = evaluateBadges();
   renderJournal();
 }

@@ -292,8 +292,6 @@ input[type="range"] { accent-color: var(--accent); width: min(260px, 100%); }
 .breathpad.on { background: var(--ink); color: var(--void); }
 body.gaming .cue { display: none; }
 body.gaming #stage canvas { cursor: default; }
-#playBtn .gpad { vertical-align: -4px; margin-right: 8px; }
-#playBtn.on { border-color: var(--accent); color: var(--accent); }
 @media (max-width: 700px) {
   body.gaming .read .row:not(:first-child), body.gaming #spark, body.gaming .src { display: none; }
   body.gaming .brand { display: none; }
@@ -317,3 +315,32 @@ body.gaming #stage canvas { cursor: default; }
 .presult { display: grid; gap: 10px; border: 1px solid var(--line); padding: 12px; margin-top: 10px; }
 .presult .big { font-family: var(--f-display); font-weight: 300; font-size: 20px; }
 .phist { display: grid; gap: 4px; margin-top: 10px; font-size: 10.5px; color: var(--mute); }
+
+/* Panels never grow wider than the screen: long option texts and labels wrap or shrink. */
+.panel-body { grid-template-columns: minmax(0, 1fr); overflow-x: hidden; }
+.panel-body > *, .tab > * { min-width: 0; }
+.tab { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-content: start; }
+.tab[hidden] { display: none; }
+.panel select, .field select { max-width: 100%; text-overflow: ellipsis; }
+.check { align-items: flex-start; line-height: 1.5; }
+.check input { flex: 0 0 auto; margin-top: 3px; }
+
+.field { grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.field > span { white-space: normal; }
+.field select { width: auto; max-width: 100%; min-width: 0; }
+
+/* Small hover labels for the icon buttons (mouse only; touch has no hover). */
+@media (hover: hover) {
+  .ico[data-tip] { position: relative; }
+  .ico[data-tip]:hover::after, .ico[data-tip]:focus-visible::after {
+    content: attr(data-tip); position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+    background: var(--panel); color: var(--ink); border: 1px solid var(--line); padding: 5px 9px;
+    font-size: 10px; letter-spacing: 0.02em; text-transform: none; white-space: nowrap; pointer-events: none; z-index: 5;
+  }
+  .grp.icons .ico[data-tip]:last-child:hover::after { left: auto; right: 0; transform: none; }
+  .grp.icons .ico[data-tip]:first-child:hover::after { left: 0; transform: none; }
+}
+@media (max-width: 420px) {
+  .tabs { padding: 0 10px; }
+  .tabs button { padding-inline: 9px; letter-spacing: 0.05em; }
+}
