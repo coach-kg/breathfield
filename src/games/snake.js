@@ -11,11 +11,11 @@ const KEYMAP = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight
 const GROW = 3, CHARGE_SEC = 60;
 
 /** Steps per second: a little faster as you grow, slower when coherent (down to half). */
-export const snakeSpeed = (len, coh) => Math.min(9, 4.5 + 0.06 * len) * (1 - 0.5 * helpOf(coh));
+export const snakeSpeed = (len, coh) => Math.min(9, 5 + 0.06 * len) * (1 - 0.4 * helpOf(coh));
 
 export function createSnake() {
   let L = null; // layout
-  let body = [], dir = 'right', queue = [], grow = 0, acc = 0;
+  let body = [], prev = [], dir = 'right', queue = [], grow = 0, acc = 0;
   let food = null, eaten = 0, best = 0, age = 0, charge = 0, sheds = 0, glides = 0;
   let parts = [];
   const gest = new Gestures();
@@ -28,6 +28,7 @@ export function createSnake() {
     L = { cs, cols, rows, x0: Math.round((W - cols * cs) / 2), y0: Math.round(top + (H - top - bottom - rows * cs) / 2), W, H };
     const cx = Math.floor(cols / 2), cy = Math.floor(rows / 2);
     body = [[cx, cy], [cx - 1, cy], [cx - 2, cy]];
+    prev = body.map((c) => [...c]);
     dir = 'right'; queue = []; grow = 0;
     placeFood();
   }
@@ -46,9 +47,12 @@ export function createSnake() {
     if (a === -c && b === -e) return; // no reversing into yourself
     if (d === last) return;
     if (queue.length < 2) queue.push(d);
+    // Answer a turn soon instead of waiting out a whole slow step.
+    if (queue.length === 1) acc = Math.max(acc, 0.55);
   }
 
   function step(help) {
+    prev = body.map((c) => [...c]);
     if (queue.length) dir = queue.shift();
     const [dx, dy] = DIRS[dir];
     const [hx, hy] = body[0];
@@ -112,6 +116,7 @@ export function createSnake() {
         acc += dt * sps;
         let n = 0;
         while (acc >= 1 && n++ < 3) { acc -= 1; step(help); }
+        acc = Math.min(acc, 0.99); // after a stalled frame, carry on rather than racing to catch up
         if (help > 0.55) charge = Math.min(1, charge + dt / CHARGE_SEC);
         for (const q of parts) q.life -= dt * 0.9;
         parts = parts.filter((q) => q.life > 0);
@@ -146,28 +151,27 @@ export function createSnake() {
         ctx.beginPath(); ctx.arc(fx, fy, r * 0.6, 0, TAU); ctx.fill();
       }
 
-      // the snake: a soft ribbon, wider on the in-breath; gaps where it wraps
+      // The snake glides: every segment slides from where it was to where it is.
       const u = clamp(acc);
-      const [ddx, ddy] = DIRS[dir];
       const w = cs * (0.52 + 0.22 * f.b);
+      const pos = body.map(([x, y], i) => {
+        const pv = prev[i];
+        if (!pv || Math.abs(pv[0] - x) > 1 || Math.abs(pv[1] - y) > 1) return C(x, y); // new tail cell or a wrap
+        return C(pv[0] + (x - pv[0]) * u, pv[1] + (y - pv[1]) * u);
+      });
+      // stroke between neighbours unless the pair crosses the wrap
       ctx.save();
       ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       for (let i = body.length - 1; i > 0; i--) {
         const [ax, ay] = body[i], [bx, by] = body[i - 1];
         if (Math.abs(ax - bx) > 1 || Math.abs(ay - by) > 1) continue;
-        const [p1x, p1y] = C(ax, ay), [p2x, p2y] = C(bx, by);
+        const [p1x, p1y] = pos[i], [p2x, p2y] = pos[i - 1];
+        if (Math.hypot(p1x - p2x, p1y - p2y) > cs * 1.6) continue;
         ctx.strokeStyle = tone(f.hue + i / Math.max(12, body.length) * 0.35, help, 58 + 10 * (1 - i / body.length));
         ctx.lineWidth = w * (0.7 + 0.3 * (1 - i / body.length));
         ctx.beginPath(); ctx.moveTo(p1x, p1y); ctx.lineTo(p2x, p2y); ctx.stroke();
       }
-      // head glides toward the next cell
-      const [hx, hy] = C(body[0][0], body[0][1]);
-      const nx = hx + ddx * cs * u, ny = hy + ddy * cs * u;
-      const wrapsNext = (body[0][0] + ddx < 0 || body[0][0] + ddx >= cols || body[0][1] + ddy < 0 || body[0][1] + ddy >= rows);
-      const hx2 = wrapsNext ? hx : nx, hy2 = wrapsNext ? hy : ny;
-      ctx.strokeStyle = tone(f.hue, help, 70);
-      ctx.lineWidth = w;
-      ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx2, hy2); ctx.stroke();
+      const [hx2, hy2] = pos[0];
       ctx.fillStyle = '#efeaff';
       ctx.beginPath(); ctx.arc(hx2, hy2, w * 0.5, 0, TAU); ctx.fill();
       // charge ring around the head
@@ -182,7 +186,7 @@ export function createSnake() {
       const sx = W < 700 ? x0 + 4 : x0 + cols * cs + 18;
       if (W >= 700) {
         stats(ctx, sx, y0 + 10, [
-          ['time', `×${(1 - 0.5 * help).toFixed(2)}`, tone(f.hue, help, 72)],
+          ['time', `×${(1 - 0.4 * help).toFixed(2)}`, tone(f.hue, help, 72)],
           ['length', body.length],
           ['longest', Math.max(best, f.best || 0)],
           ['glide', charge >= 1 ? 'ready' : `${Math.round(charge * 100)}%`],
@@ -191,7 +195,7 @@ export function createSnake() {
         ctx.fillStyle = 'rgba(239,234,255,0.7)';
         ctx.font = `10px ${FONT}`;
         ctx.textAlign = 'left';
-        ctx.fillText(`time ×${(1 - 0.5 * help).toFixed(2)} · length ${body.length} · glide ${charge >= 1 ? 'ready' : `${Math.round(charge * 100)}%`}`, sx, y0 + rows * cs + 16);
+        ctx.fillText(`time ×${(1 - 0.4 * help).toFixed(2)} · length ${body.length} · glide ${charge >= 1 ? 'ready' : `${Math.round(charge * 100)}%`}`, sx, y0 + rows * cs + 16);
       }
       hint(ctx, f, f.touch ? this.hints.touch : this.hints.keys, W / 2, y0 - 14, age);
     },

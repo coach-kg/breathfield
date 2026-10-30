@@ -51,7 +51,8 @@ How coherence, the adaptive ranks and the badges work: [docs/HOW-IT-WORKS.md](do
 
 *Breathing pace → Find my pace* runs a 10-minute test (five rates, 2 minutes each) and suggests the
 breathing rate where your heart swings most, with a history so you can see if it drifts. On
-Android phones the pacer can also be felt as vibration (Settings → Haptics).
+Android phones the pacer can also be felt as vibration (Settings → Haptics), and on a computer
+*Breathing pace → Feel it on your phone* shows a QR code that turns your phone into a pacer pad.
 
 ## Games
 

@@ -39,9 +39,11 @@ export function createLantern() {
 
   function generate(until) {
     while (genX < until) {
-      const gap = rnd(1.3, 3.0);
-      const w = rnd(3, 8);
-      const y = clamp(genY + rnd(-1.6, 1.8), -8, 8);
+      // Always jumpable with room to spare: a climb gets a shorter gap.
+      const y = clamp(genY + rnd(-1.4, 1.6), -8, 8);
+      const climb = genY - y;
+      const gap = rnd(1.2, climb > 0.6 ? 2.0 : 2.6);
+      const w = rnd(3.5, 8);
       const x = genX + gap;
       // stars along the jump over the gap, only visible in the light
       if (Math.random() < 0.5) stars.push({ x: genX + gap / 2, y: Math.min(genY, y) - 2.1, got: false });
@@ -60,7 +62,7 @@ export function createLantern() {
         plats.push({ x: x + w / 2 - 0.5, y: y - 3.2, w: 1, h: 1, kind: 'block', used: false });
       }
       sincePost += gap + w;
-      if (sincePost > 26) { posts.push({ x: x + w / 2, y, on: false }); sincePost = 0; }
+      if (sincePost > 12) { posts.push({ x: x + w / 2, y, on: false }); sincePost = 0; }
       genX = x + w; genY = y;
     }
     // forget what is far behind
@@ -95,6 +97,10 @@ export function createLantern() {
     pl.x += pl.vx * dt;
     for (const p of plats) {
       if (!solid(p) || p.kind === 'hidden' || !overlap(p)) continue;
+      // Kind corners: if your feet are just below the top edge, step up onto it
+      // instead of being stopped by the wall and sliding down into the gap.
+      const below = pl.y + PH - p.y;
+      if (p.kind === 'main' && below > 0 && below < 0.6 && pl.vy > -6) { pl.y = p.y - PH; pl.vy = 0; pl.ground = true; pl.air = 0; continue; }
       if (pl.vx > 0) pl.x = p.x - PW; else if (pl.vx < 0) pl.x = p.x + p.w;
       pl.vx = 0;
     }
@@ -128,6 +134,8 @@ export function createLantern() {
     id: 'lantern',
     hints: { keys: '← → walk · ↑ or X jump', touch: 'hold a side to walk · swipe up or tap to jump' },
     stats() { return { score: nStars * 10 + Math.floor(farX - startX), stars: nStars, distance: Math.floor(farX - startX), falls, gifts }; },
+    /** For automated play-testing. */
+    _debug() { return { pl, plats, posts, spawn }; },
 
     key(e, down) {
       const k = e.key;

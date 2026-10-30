@@ -112,6 +112,12 @@ beat single pulses, which people found easy to miss or startling. Other modes: a
 heartbeat, and rare positive taps (climbing a zone, a minute in high, every 100 glow). Vibration
 is always off while the phone camera reads your pulse.
 
+**Pacer pad** (`pad.html`, `src/pad.js`): a computer cannot vibrate, so it shows a QR code
+with a link holding the breathing pattern and the wall-clock moment its pacer started
+(`pad.html#p=i4,o6&e=…`). The phone runs the same rhythm from that and vibrates with it; nothing
+is sent between the two. Both clocks keep internet time, so they agree within about 0.1 s, and
+±0.1 s buttons on the phone take care of the rest.
+
 ## Motion artifacts
 
 The phone camera sees blood volume in the fingertip, and any movement of the finger changes the

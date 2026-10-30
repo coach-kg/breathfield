@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Breathfield Pacer Pad</title>
+<meta name="description" content="Your phone as a breathing pacer you can feel, in step with Breathfield on another screen.">
+<meta name="theme-color" content="#06050a">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@300;400;500&family=Unbounded:wght@200;300&display=swap">
+<style>
+  :root { --void: #06050a; --ink: #efeaff; --mute: #9d97b8; --line: rgba(239, 234, 255, 0.14); --accent: #d4c2ff; --veil: rgba(10, 8, 18, 0.6); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--void); color: var(--ink); font-family: "Martian Mono", ui-monospace, monospace; font-size: 12px;
+    display: grid; grid-template-rows: auto 1fr auto; min-height: 100dvh; overflow: hidden; -webkit-user-select: none; user-select: none;
+    padding: calc(env(safe-area-inset-top, 0px) + 16px) max(16px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 16px) max(16px, env(safe-area-inset-left, 0px)); }
+  header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .brand { font-family: "Unbounded", sans-serif; font-weight: 300; font-size: 15px; }
+  .pace { color: var(--mute); font-size: 10.5px; }
+  main { display: grid; place-items: center; position: relative; }
+  #orb { width: min(70vw, 52vh); aspect-ratio: 1; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; position: relative; }
+  #fill { position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle, rgba(212, 194, 255, 0.55), rgba(212, 194, 255, 0.05) 70%); transform: scale(0.2); }
+  #word { position: relative; font-family: "Unbounded", sans-serif; font-weight: 200; font-size: clamp(26px, 9vw, 44px); letter-spacing: 0.3em; padding-left: 0.3em; }
+  #sec { position: absolute; bottom: 18%; color: var(--mute); font-size: 11px; }
+  footer { display: grid; gap: 10px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  button, select { font: inherit; font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); background: var(--veil);
+    border: 1px solid var(--line); padding: 11px 14px; border-radius: 0; }
+  select { text-transform: none; letter-spacing: 0.02em; }
+  #go { flex: 1; border-color: var(--accent); color: var(--accent); padding-block: 15px; }
+  #go[aria-pressed="true"] { background: var(--accent); color: var(--void); }
+  .note { color: var(--mute); font-size: 10.5px; line-height: 1.6; margin: 0; }
+  .nudge { display: flex; align-items: center; gap: 6px; }
+  .nudge span { min-width: 64px; text-align: center; font-variant-numeric: tabular-nums; color: var(--mute); }
+  .warn { color: #ff9f80; }
+</style>
+</head>
+<body>
+<header><span class="brand">Pacer pad</span><span class="pace" id="pace"></span></header>
+<main>
+  <div id="orb" aria-hidden="true"><div id="fill"></div><div id="word">in</div><div id="sec"></div></div>
+</main>
+<footer>
+  <p class="note" id="msg">Lay the phone on your chest or hold it. It vibrates in step with the pacer on your other screen.</p>
+  <div class="row"><button id="go" aria-pressed="false">Start vibrating</button></div>
+  <div class="row">
+    <select id="mode" aria-label="Pattern"><option value="in">Swell while breathing in</option><option value="inout">Swell in, fade out</option></select>
+    <select id="strength" aria-label="Strength"><option value="gentle">Gentle</option><option value="medium" selected>Medium</option><option value="strong">Strong</option></select>
+  </div>
+  <div class="row nudge"><span class="note">Out of step?</span><button id="earlier" aria-label="Earlier by 0.1 second">−0.1 s</button><span id="offset">±0.0 s</span><button id="later" aria-label="Later by 0.1 second">+0.1 s</button></div>
+</footer>
+<script type="module" src="src/pad.js"></script>
+</body>
+</html>

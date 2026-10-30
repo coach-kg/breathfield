@@ -1,9 +1,9 @@
 // Offline support: serve the app from cache when there is no network,
 // and refresh the cache whenever the network answers.
-const CACHE = 'breathfield-v5';
+const CACHE = 'breathfield-v6';
 const SHELL = [
   './', 'index.html', 'css/app.css', 'manifest.webmanifest', 'icon.svg',
-  'src/main.js', 'src/store.js', 'src/audio.js', 'src/haptics.js',
+  'src/main.js', 'src/store.js', 'src/audio.js', 'src/haptics.js', 'pad.html', 'src/pad.js',
   'src/engine/breath.js', 'src/engine/coherence.js', 'src/engine/levels.js', 'src/engine/progress.js', 'src/engine/achievements.js', 'src/engine/glow.js', 'src/engine/resonance.js',
   'src/visuals/scenes.js', 'src/visuals/badges.js',
   'src/games/index.js', 'src/games/common.js', 'src/games/stillfall.js', 'src/games/snake.js', 'src/games/bow.js', 'src/games/cairn.js', 'src/games/lantern.js',
